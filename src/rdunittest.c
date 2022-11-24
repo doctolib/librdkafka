@@ -55,6 +55,7 @@
 #include "rdkafka_txnmgr.h"
 #if WITH_SASL_AWS_MSK_IAM
 #include "rdkafka_sasl_aws_msk_iam.h"
+#include "rdkafka_aws.h"
 #endif
 
 rd_bool_t rd_unittest_assert_on_failure = rd_false;
@@ -433,6 +434,7 @@ extern int unittest_sasl_oauthbearer_oidc(void);
 #endif
 #if WITH_SASL_AWS_MSK_IAM
 extern int unittest_aws_msk_iam (void);
+extern int unittest_aws (void);
 #endif
 
 int rd_unittest(void) {
@@ -476,6 +478,7 @@ int rd_unittest(void) {
 #endif
 #if WITH_SASL_AWS_MSK_IAM
                 { "sasl_aws_msk_iam", unittest_aws_msk_iam },
+                { "aws", unittest_aws },
 #endif
                 { "stringbuilder",  unittest_stringbuilder },
                 { NULL }

@@ -58,6 +58,9 @@
 #if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
+#if WITH_SASL_AWS_MSK_IAM
+#include "rdkafka_sasl_aws_msk_iam.h"
+#endif
 #if WITH_SSL
 #include "rdkafka_ssl.h"
 #endif
@@ -2275,6 +2278,10 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
             !rk->rk_conf.sasl.oauthbearer.token_refresh_cb)
                 rd_kafka_conf_set_oauthbearer_token_refresh_cb(
                     &rk->rk_conf, rd_kafka_oidc_token_refresh_cb);
+#endif
+#if WITH_SASL_AWS_MSK_IAM
+        rk->rk_conf.enabled_events |=
+                RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH;
 #endif
 
         rk->rk_controllerid = -1;
