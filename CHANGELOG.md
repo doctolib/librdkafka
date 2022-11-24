@@ -82,6 +82,12 @@ librdkafka v1.9.0 is a feature release:
  * Added `test.mock.broker.rtt` to simulate RTT/latency for mock brokers.
 
 
+
+## Enhancements
+
+  * Added `AWS_MSK_IAM` to supported `sasl.mechanisms`. This feature
+  provides support for using IAM authentication on AWS MSK clusters. (@garrett528, #3402)
+
 ## Fixes
 
 ### General fixes

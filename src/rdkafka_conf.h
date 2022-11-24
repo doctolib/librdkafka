@@ -285,6 +285,14 @@ struct rd_kafka_conf_s {
                 /* Hash size */
                 size_t scram_H_size;
 #endif
+#if WITH_SASL_AWS_MSK_IAM
+                /* AWS credentials for SASL auth
+                 * (standard toolchain not available in librdkafka) */
+                char *aws_access_key_id;
+                char *aws_secret_access_key;
+                char *aws_region;
+                char *aws_security_token;  /* only needed for STS AssumeRole */
+#endif
                 char *oauthbearer_config;
                 int enable_oauthbearer_unsecure_jwt;
                 int enable_callback_queue;

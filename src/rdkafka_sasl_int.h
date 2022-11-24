@@ -85,5 +85,8 @@ int rd_kafka_sasl_send(rd_kafka_transport_t *rktrans,
                        int len,
                        char *errstr,
                        size_t errstr_size);
+#if WITH_SASL_AWS_MSK_IAM
+extern const struct rd_kafka_sasl_provider rd_kafka_sasl_aws_msk_iam_provider;
+#endif
 
 #endif /* _RDKAFKA_SASL_INT_H_ */

@@ -302,7 +302,7 @@ rd_kafka_conf_validate_broker_version(const struct rd_kafka_property *prop,
 }
 
 /**
- * @brief Validate that string is a single item, without delimters (, space).
+ * @brief Validate that string is a single item, without delimiters (, space).
  */
 static RD_UNUSED int
 rd_kafka_conf_validate_single(const struct rd_kafka_property *prop,
@@ -355,6 +355,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
              {0x800, "sasl_oauthbearer", _UNSUPPORTED_SSL},
              {0x1000, "http", _UNSUPPORTED_HTTP},
              {0x2000, "oidc", _UNSUPPORTED_OIDC},
+             {0x4000, "sasl_aws_msk_iam", _UNSUPPORTED_SSL },
              {0, NULL}}},
     {_RK_GLOBAL, "client.id", _RK_C_STR, _RK(client_id_str),
      "Client identifier.", .sdef = "rdkafka"},
@@ -869,7 +870,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 
     {_RK_GLOBAL | _RK_HIGH, "sasl.mechanisms", _RK_C_STR, _RK(sasl.mechanisms),
      "SASL mechanism to use for authentication. "
-     "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER. "
+     "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, AWS_MSK_IAM. "
      "**NOTE**: Despite the name only one mechanism must be configured.",
      .sdef = "GSSAPI", .validate = rd_kafka_conf_validate_single},
     {_RK_GLOBAL | _RK_HIGH, "sasl.mechanism", _RK_C_ALIAS,
@@ -912,7 +913,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_HIGH | _RK_SENSITIVE, "sasl.password", _RK_C_STR,
      _RK(sasl.password),
      "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism"},
-    {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.config", _RK_C_STR,
+    { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws_access_key_id", _RK_C_STR,
+     _RK(sasl.aws_access_key_id),
+     "SASL AWS access key id for use with the AWS_MSK_IAM mechanism" },
+     { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws_secret_access_key", _RK_C_STR,
+      _RK(sasl.aws_secret_access_key),
+     "SASL AWS secret access key for use with the AWS_MSK_IAM mechanism" },
+     { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws_region", _RK_C_STR,
+      _RK(sasl.aws_region),
+      "SASL AWS region for use with the AWS_MSK_IAM mechanism" },
+     { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws_security_token", _RK_C_STR,
+       _RK(sasl.aws_security_token),
+       "SASL AWS security for use with the AWS_MSK_IAM mechanism if using "
+       "STS (temp) credentials" },
+     {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.config", _RK_C_STR,
      _RK(sasl.oauthbearer_config),
      "SASL/OAUTHBEARER configuration. The format is "
      "implementation-dependent and must be parsed accordingly. The "
