@@ -149,10 +149,7 @@ void foo (void) {
 
         if [[ $WITH_CURL == y ]]; then
             mkl_allvar_set WITH_OAUTHBEARER_OIDC WITH_OAUTHBEARER_OIDC y
-            if mkl_lib_check "libxml2" "" disable CC "-lxml2" \
-                "#include <libxml/parser.h>"; then
-                mkl_allvar_set WITH_SASL_AWS_MSK_IAM WITH_SASL_AWS_MSK_IAM y
-            fi
+            mkl_allvar_set WITH_SASL_AWS_MSK_IAM WITH_SASL_AWS_MSK_IAM y
         fi
     fi
 

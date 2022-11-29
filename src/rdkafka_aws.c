@@ -34,7 +34,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <curl/curl.h>
-#include <libxml/parser.h>
+
 
 #include "rdkafka_int.h"
 #include "rdkafka_transport.h"
@@ -42,6 +42,8 @@
 #include "rdkafka_sasl.h"
 #include "rdkafka_sasl_int.h"
 #include "rdkafka_aws.h"
+#include "rdhttp.h"
+#include "cJSON.h"
 
 #include "rdstringbuilder.h"
 #include "rdtypes.h"
@@ -67,28 +69,6 @@ typedef struct {
     size_t len;
     size_t buflen;
 } curl_in_mem_buf;
-
-/**
- * @brief Curl callback to write response contents
- */
-static size_t rd_kafka_aws_curl_write_callback(char *ptr, size_t size, size_t nmemb, void *userdata)
-{
-    size_t realsize = size * nmemb; 
-    curl_in_mem_buf *req = (curl_in_mem_buf *) userdata;
-
-    printf("receive chunk of %zu bytes\n", realsize);
-
-    while (req->buflen < req->len + realsize + 1)
-    {
-        req->buffer = realloc(req->buffer, req->buflen + CHUNK_SIZE);
-        req->buflen += CHUNK_SIZE;
-    }
-    memcpy(&req->buffer[req->len], ptr, realsize);
-    req->len += realsize;
-    req->buffer[req->len] = 0;
-
-    return realsize;
-}
 
 /**
  * @brief Uri escapes a string
@@ -386,204 +366,6 @@ static char *rd_kafka_aws_build_signature (const char *aws_secret_access_key,
         return signature;
 }
 
-int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
-                        const char *ymd,
-                        const char *hms,
-                        const char *host,
-                        const char *aws_access_key_id,
-                        const char *aws_secret_access_key,
-                        const char *aws_security_token,
-                        const char *aws_region,
-                        const char *aws_service,
-                        const char *method,
-                        const char *algorithm,
-                        const char *canonical_headers,
-                        const char *signed_headers,
-                        const char *request_parameters,
-                        const EVP_MD *md) {
-        int r = 1;
-
-        char *canonical_request = rd_kafka_aws_build_canonical_request(
-                host,
-                method,
-                "",
-                canonical_headers,
-                signed_headers,
-                request_parameters,
-                md
-        );
-        char *credential_scope = rd_kafka_aws_construct_credential_scope(
-                ymd,
-                aws_region,
-                aws_service
-        );
-        char *amz_date = rd_kafka_aws_construct_amz_date(ymd, hms);
-        char *string_to_sign = rd_kafka_aws_build_string_to_sign(
-                algorithm,
-                credential_scope,
-                amz_date,
-                canonical_request,
-                md
-        );
-        char *signature = rd_kafka_aws_build_signature(
-                aws_secret_access_key,
-                aws_region,
-                ymd,
-                aws_service,
-                string_to_sign
-        );
-        char *authorization_header = rd_kafka_aws_construct_authorization_header(
-                algorithm,
-                aws_access_key_id,
-                credential_scope,
-                signed_headers,
-                signature
-        );
-
-        CURL *curl;
-        CURLcode res;
-        curl = curl_easy_init();
-
-        curl_in_mem_buf req = {.buffer = NULL, .len = 0, .buflen = 0};
-
-        if (curl) {
-                str_builder_t *sb;
-                sb = str_builder_create();
-
-                curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method);
-
-                str_builder_add_str(sb, "https://");
-                str_builder_add_str(sb, host);
-                char *curl_host = str_builder_dump(sb);
-                str_builder_clear(sb);
-                curl_easy_setopt(curl, CURLOPT_URL, curl_host);
-
-                curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-                curl_easy_setopt(curl, CURLOPT_DEFAULT_PROTOCOL, "https");
-
-                req.buffer = rd_malloc(CHUNK_SIZE);
-                req.buflen = CHUNK_SIZE;
-
-                curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, rd_kafka_aws_curl_write_callback);
-                curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&req);
-
-                /* Set Curl data */
-                curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request_parameters);
-
-                // /* Set Curl headers */
-                struct curl_slist *headers = NULL;
-                str_builder_add_str(sb, "Host: ");
-                str_builder_add_str(sb, host);
-                char *curl_host_header = str_builder_dump(sb);
-                str_builder_clear(sb);
-                headers = curl_slist_append(headers, curl_host_header);
-                headers = curl_slist_append(headers, "User-Agent: librdkafka");
-
-                char content_length[256];
-                rd_snprintf(content_length, sizeof(content_length), "%zu", strlen(request_parameters));
-                str_builder_add_str(sb, "Content-Length: ");
-                str_builder_add_str(sb, content_length);
-                char *curl_content_length_header = str_builder_dump(sb);
-                str_builder_clear(sb);
-                headers = curl_slist_append(headers, curl_content_length_header);
-                headers = curl_slist_append(headers, "Content-Type: application/x-www-form-urlencoded; charset=utf-8");
-
-                str_builder_add_str(sb, "Authorization: ");
-                str_builder_add_str(sb, authorization_header);
-                char *curl_auth_header = str_builder_dump(sb);
-                str_builder_clear(sb);
-                headers = curl_slist_append(headers, curl_auth_header);
-
-                str_builder_add_str(sb, "X-Amz-Date: ");
-                str_builder_add_str(sb, amz_date);
-                char *curl_amz_date_header = str_builder_dump(sb);
-                str_builder_clear(sb);
-                headers = curl_slist_append(headers, curl_amz_date_header);
-                headers = curl_slist_append(headers, "Accept-Encoding: gzip");
-
-                char *curl_amz_security_token_header = NULL;
-                if (aws_security_token != NULL) {
-                        str_builder_add_str(sb, "X-Amz-Security-Token: ");
-                        str_builder_add_str(sb, aws_security_token);
-                        curl_amz_security_token_header = str_builder_dump(sb);
-                        str_builder_clear(sb);
-                        headers = curl_slist_append(headers, curl_amz_security_token_header);
-                }
-                
-                str_builder_destroy(sb);
-                curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-                res = curl_easy_perform(curl);
-                if (res != CURLE_OK) {
-                        /* add errstr handling */
-                        fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
-                        return -1;
-                }
-
-                xmlDoc *document;
-                xmlNode *cur;
-                document = xmlReadMemory(req.buffer, req.len, "assume_role_response.xml", NULL, 0);
-                if (document == NULL) {
-                        /* add errstr handling */
-                        fprintf(stderr, "Failed to parse document\n");
-                        // return -1;
-                }
-                cur = xmlDocGetRootElement(document);
-                cur = cur->children;
-                while (cur != NULL) {
-                        if ((!xmlStrcmp(cur->name, (const xmlChar *)"AssumeRoleResult"))) {
-                                break;
-                        }
-                        cur = cur->next;
-                }
-
-                cur = cur->children;
-                while (cur != NULL) {
-                        if ((!xmlStrcmp(cur->name, (const xmlChar *)"Credentials"))) {
-                                break;
-                        }
-                        cur = cur->next;
-                }
-
-                cur = cur->children;
-                while (cur != NULL) {
-                        if ((!xmlStrcmp(cur->name, (const xmlChar *)"AccessKeyId"))) {
-                                xmlChar *content = xmlNodeListGetString(document, cur->children, 1);
-                                credential->aws_access_key_id = rd_strdup((const char *)content);
-                                xmlFree(content);
-                        }
-
-                        if ((!xmlStrcmp(cur->name, (const xmlChar *)"SecretAccessKey"))) {
-                                xmlChar *content = xmlNodeListGetString(document, cur->children, 1);
-                                credential->aws_secret_access_key = rd_strdup((const char *)content);
-                                xmlFree(content);
-                        }
-
-                        if ((!xmlStrcmp(cur->name, (const xmlChar *)"SessionToken"))) {
-                                xmlChar *content = xmlNodeListGetString(document, cur->children, 1);
-                                credential->aws_security_token = rd_strdup((const char *)content);
-                                xmlFree(content);
-                        }
-
-                        cur = cur->next;
-                }
-
-                xmlFreeDoc(document);
-                xmlCleanupParser();
-
-                rd_free(req.buffer);
-                rd_free(curl_host);
-                rd_free(curl_host_header);
-                rd_free(curl_content_length_header);
-                rd_free(curl_auth_header);
-                rd_free(curl_amz_date_header);
-                RD_IF_FREE(curl_amz_security_token_header, rd_free);
-        }
-        curl_easy_cleanup(curl);
-
-        return r;
-}
-
 /**
  * @brief Generates a sasl_payload
  * @remark sasl_payload will be allocated and must be freed.
@@ -680,6 +462,175 @@ char *rd_kafka_aws_build_sasl_payload (const char *ymd,
         
         return sasl_payload;
 }
+
+static rd_http_error_t * rd_kafka_aws_http_get(char * url, char ** result) {
+        rd_http_error_t *herr;
+        rd_buf_t *ptr = NULL;
+        rd_slice_t slice;
+        size_t len;
+        herr = rd_http_get(url, &ptr);
+        if (!herr) {
+                // Extract result in a block of contiguous memory
+                rd_slice_init_full(&slice, ptr);
+                len = rd_buf_len(ptr);
+                *result = rd_malloc(len + 1);
+                rd_slice_read(&slice, *result, len);
+                (*result)[len] = '\0';
+        }
+        RD_IF_FREE(ptr, rd_free);
+        return herr;
+}
+
+// #define AWS_METADATA_BASE_URL http://169.254.169.254
+
+#define AWS_METADATA_BASE_URL "http://localhost:8080"
+#define AWS_METADATA_SECURITY_CREDENTIALS_URL AWS_METADATA_BASE_URL"/latest/meta-data/iam/security-credentials/"
+#define AWS_METADATA_AZ_URL AWS_METADATA_BASE_URL"/latest/meta-data/placement/availability-zone"
+
+
+int rd_kafka_aws_region_from_metadata(rd_kafka_t *rk,
+                                           char *errstr,
+                                           size_t errstr_size) {
+        int result = 0;
+        rd_http_error_t *herr = NULL;
+        char * raw = NULL;
+        herr = rd_kafka_aws_http_get(AWS_METADATA_AZ_URL, &raw);
+        if (!herr) {
+                // strip the zone name
+                raw[strlen(raw) - 1] = '\0';
+                RD_IF_FREE(rk->rk_conf.sasl.aws_region, rd_free);
+                rk->rk_conf.sasl.aws_region = rd_strdup(raw);
+
+                rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "Region set from metadata API: %s", raw);
+                rd_http_error_destroy(herr);
+        }
+        RD_IF_FREE(herr, rd_free);
+        RD_IF_FREE(raw, rd_free);
+
+        return result;
+}
+
+int rd_kafka_aws_credentials_from_metadata(rd_kafka_t *rk,
+                                           char *errstr,
+                                           size_t errstr_size) {
+        int result = 0;
+        rd_http_error_t *herr = NULL;
+        rd_http_error_t *herr2 = NULL;
+        cJSON *jsonp = NULL;
+
+        cJSON *json_code, *json_aws_access_key_id, *json_aws_secret_access_key, *json_aws_security_token;
+        char *code, *aws_access_key_id, *aws_secret_access_key, *aws_security_token;
+
+        char * raw = NULL;
+        char * url2 = NULL;
+        char * raw2 = NULL;
+
+        herr = rd_kafka_aws_http_get(AWS_METADATA_SECURITY_CREDENTIALS_URL, &raw);
+        if (!herr) {
+                // Build the full url of creds
+                url2 = rd_malloc(sizeof(AWS_METADATA_SECURITY_CREDENTIALS_URL) + strlen(raw) + 1);
+                sprintf(url2, "%s%s", AWS_METADATA_SECURITY_CREDENTIALS_URL, raw);
+
+                rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "Calling metadata API on the URL: %s", url2);
+                herr2 = rd_kafka_aws_http_get(url2, &raw2);
+
+                if (!herr2) {
+                        jsonp = cJSON_Parse(raw2);
+                        if (jsonp != NULL) {
+                                json_code = cJSON_GetObjectItem(jsonp, "Code");
+                                if (json_code == NULL) {
+                                        rd_snprintf(errstr, errstr_size, "Unable to parse JSON from metadata API");
+                                        result = -1;
+                                        goto done;
+                                }
+
+                                code = cJSON_GetStringValue(json_code);
+                                if (code == NULL) {
+                                        rd_snprintf(errstr, errstr_size, "Unable to parse JSON from metadata API");
+                                        result = -1;
+                                        goto done;
+                                }
+
+                                if (strcmp(code, "Success") != 0) {
+                                        rd_snprintf(errstr, errstr_size, "Wrong return from metadata API: %s", code);
+                                        result = -1;
+                                        goto done;
+                                }
+
+                                json_aws_access_key_id = cJSON_GetObjectItem(jsonp, "AccessKeyId");
+                                if (json_aws_access_key_id == NULL) {
+                                        rd_snprintf(errstr, errstr_size, "Unable to parse JSON from metadata API");
+                                        result = -1;
+                                        goto done;
+                                }
+
+                                aws_access_key_id = cJSON_GetStringValue(json_aws_access_key_id);
+                                if (aws_access_key_id == NULL) {
+                                        rd_snprintf(errstr, errstr_size, "Unable to parse JSON from metadata API");
+                                        result = -1;
+                                        goto done;
+                                }
+
+                                json_aws_secret_access_key = cJSON_GetObjectItem(jsonp, "SecretAccessKey");
+                                if (json_aws_secret_access_key == NULL) {
+                                        rd_snprintf(errstr, errstr_size, "Unable to parse JSON from metadata API");
+                                        result = -1;
+                                        goto done;
+                                }
+
+                                aws_secret_access_key = cJSON_GetStringValue(json_aws_secret_access_key);
+                                if (aws_secret_access_key == NULL) {
+                                        rd_snprintf(errstr, errstr_size, "Unable to parse JSON from metadata API");
+                                        result = -1;
+                                        goto done;
+                                }
+
+                                json_aws_security_token = cJSON_GetObjectItem(jsonp, "Token");
+                                if (json_aws_security_token == NULL) {
+                                        rd_snprintf(errstr, errstr_size, "Unable to parse JSON from metadata API");
+                                        result = -1;
+                                        goto done;
+                                }
+
+                                aws_security_token = cJSON_GetStringValue(json_aws_security_token);
+                                if (aws_security_token == NULL) {
+                                        rd_snprintf(errstr, errstr_size, "Unable to parse JSON from metadata API");
+                                        result = -1;
+                                        goto done;
+                                }
+
+                                RD_IF_FREE(rk->rk_conf.sasl.aws_access_key_id, rd_free);
+                                rk->rk_conf.sasl.aws_access_key_id = rd_strdup(aws_access_key_id);
+
+                                RD_IF_FREE(rk->rk_conf.sasl.aws_secret_access_key, rd_free);
+                                rk->rk_conf.sasl.aws_secret_access_key = rd_strdup(aws_secret_access_key);
+
+                                RD_IF_FREE(rk->rk_conf.sasl.aws_security_token, rd_free);
+                                rk->rk_conf.sasl.aws_security_token = rd_strdup(aws_security_token);
+
+                                rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "Creds initialized from Metadata API");
+                                printf("FOO %s %s %s\n", aws_access_key_id, aws_secret_access_key, aws_security_token);
+                        }
+                }
+                else {
+                        rd_http_error_destroy(herr2);
+                        rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "Error calling the metdata API with url: %s", raw);
+                        result = -1;
+                        goto done;
+                }
+        }
+        else {
+                rd_http_error_destroy(herr);
+        }
+done:
+        RD_IF_FREE(url2, rd_free);
+        RD_IF_FREE(raw, rd_free);
+        RD_IF_FREE(raw2, rd_free);
+        RD_IF_FREE(jsonp, cJSON_Delete);
+
+        return result;
+}
+
 
 
 /**

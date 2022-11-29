@@ -70,22 +70,14 @@ char *rd_kafka_aws_build_sasl_payload (
         const char *signed_headers,
         const char *request_parameters,
         const EVP_MD *md);
-int rd_kafka_aws_send_request (
-        rd_kafka_aws_credential_t *credential,
-        const char *ymd,
-        const char *hms,
-        const char *host,
-        const char *aws_access_key_id,
-        const char *aws_secret_access_key,
-        const char *aws_security_token,
-        const char *aws_region,
-        const char *aws_service,
-        const char *method,
-        const char *algorithm,
-        const char *canonical_headers,
-        const char *signed_headers,
-        const char *request_parameters,
-        const EVP_MD *md);
+int rd_kafka_aws_credentials_from_metadata(
+        rd_kafka_t *rk,
+        char *errstr,
+        size_t errstr_size);
+int rd_kafka_aws_region_from_metadata(
+        rd_kafka_t *rk,
+        char *errstr,
+        size_t errstr_size);
 
 int unittest_aws (void);
 
