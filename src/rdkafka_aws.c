@@ -77,19 +77,19 @@ typedef struct {
 char *rd_kafka_aws_uri_encode (const char *in) {
         char *ret;
         int ret_len;
-        
+
         CURL *curl = curl_easy_init();
         if (curl) {
             char *encoded = curl_easy_escape(curl, in, (int)strlen(in));
             ret_len = strlen(encoded)+1;
             ret = rd_malloc(ret_len);
             memcpy(ret, encoded, ret_len);
-            
+
             curl_free(encoded);
             curl_easy_cleanup(curl);
             return ret;
         }
-        
+
         return NULL;
 }
 
@@ -109,10 +109,10 @@ static unsigned char *rd_kafka_aws_hmac_sha256 (const void *key, int keylen,
 static char *rd_kafka_aws_construct_amz_date (const char *ymd, const char *hms) {
         int amz_date_size = strlen(ymd) + strlen(hms) + strlen("TZ") + 1;
         char *amz_date_buf;
-        
+
         amz_date_buf = rd_malloc(amz_date_size);
         rd_snprintf(amz_date_buf, amz_date_size, "%sT%sZ", ymd, hms);
-        
+
         return amz_date_buf;
 }
 
@@ -136,11 +136,11 @@ static char *rd_kafka_aws_construct_authorization_header (const char *algorithm,
         str_builder_add_str(sb, signed_headers);
         str_builder_add_str(sb, ", Signature=");
         str_builder_add_str(sb, signature);
-        
+
         char *authorization_header = str_builder_dump(sb);
 
         str_builder_destroy(sb);
-        
+
         return authorization_header;
 }
 
@@ -171,7 +171,7 @@ char *rd_kafka_aws_build_sasl_canonical_querystring (const char *action,
                                                 const char *aws_service,
                                                 const char *aws_security_token) {
         char *uri_action = rd_kafka_aws_uri_encode(action);
-        
+
         char *credential_scope = rd_kafka_aws_construct_credential_scope(
                 ymd,
                 aws_region,
@@ -185,10 +185,10 @@ char *rd_kafka_aws_build_sasl_canonical_querystring (const char *action,
         char *credential = str_builder_dump(sb);
         str_builder_clear(sb);
         char *uri_credential = rd_kafka_aws_uri_encode(credential);
-        
+
         char *amz_date = rd_kafka_aws_construct_amz_date(ymd, hms);
         char *uri_amz_date = rd_kafka_aws_uri_encode(amz_date);
-        
+
         str_builder_add_str(sb, "Action=");
         str_builder_add_str(sb, uri_action);
         str_builder_add_str(sb, "&");
@@ -200,30 +200,30 @@ char *rd_kafka_aws_build_sasl_canonical_querystring (const char *action,
         str_builder_add_str(sb, uri_amz_date);
         str_builder_add_str(sb, "&");
         str_builder_add_str(sb, "X-Amz-Expires=900&");  // AWS recommends 900 seconds
-        
+
         if (aws_security_token != NULL) {
             char *uri_amz_security_token = rd_kafka_aws_uri_encode(aws_security_token);
-            
+
             str_builder_add_str(sb, "X-Amz-Security-Token=");
             str_builder_add_str(sb, uri_amz_security_token);
             str_builder_add_str(sb, "&");
-            
+
             RD_IF_FREE(uri_amz_security_token, rd_free);
         }
-        
+
         str_builder_add_str(sb, "X-Amz-SignedHeaders=host");
-        
+
         char *canonical_query_string = str_builder_dump(sb);
-        
+
         str_builder_destroy(sb);
-        
+
         RD_IF_FREE(uri_action, rd_free);
         RD_IF_FREE(credential_scope, rd_free);
         RD_IF_FREE(credential, rd_free);
         RD_IF_FREE(uri_credential, rd_free);
         RD_IF_FREE(amz_date, rd_free);
         RD_IF_FREE(uri_amz_date, rd_free);
-        
+
         return canonical_query_string;
 }
 
@@ -241,7 +241,7 @@ static char *rd_kafka_aws_build_canonical_request (const char *hostname,
         unsigned char md_value[EVP_MAX_MD_SIZE];
         unsigned int md_len, i;
         EVP_MD_CTX *mdctx;
-        
+
         mdctx = EVP_MD_CTX_new();
         EVP_DigestInit_ex(mdctx, md, NULL);
         EVP_DigestUpdate(mdctx, request_parameters, strlen(request_parameters));
@@ -252,7 +252,7 @@ static char *rd_kafka_aws_build_canonical_request (const char *hostname,
         for (i = 0; i < md_len; i++)
                sprintf(&(payload_hash[i * 2]), "%02x", md_value[i]);  // save string in hex base 16
         payload_hash[64] = '\0';
-        
+
         str_builder_t *sb;
         sb = str_builder_create();
         str_builder_add_str(sb, method);
@@ -266,11 +266,11 @@ static char *rd_kafka_aws_build_canonical_request (const char *hostname,
         str_builder_add_str(sb, signed_headers);
         str_builder_add_str(sb, "\n");
         str_builder_add_str(sb, payload_hash);
-        
+
         char *canonical_request = str_builder_dump(sb);
-        
+
         str_builder_destroy(sb);
-        
+
         return canonical_request;
 }
 
@@ -286,7 +286,7 @@ static char *rd_kafka_aws_build_string_to_sign (const char *algorithm,
         unsigned char md_value[EVP_MAX_MD_SIZE];
         unsigned int md_len, i;
         EVP_MD_CTX *mdctx;
-        
+
         mdctx = EVP_MD_CTX_new();
         EVP_DigestInit_ex(mdctx, md, NULL);
         EVP_DigestUpdate(mdctx, canonical_request, strlen(canonical_request));
@@ -297,7 +297,7 @@ static char *rd_kafka_aws_build_string_to_sign (const char *algorithm,
         for (i = 0; i < md_len; i++)
                sprintf(&(hashed_canonical_request[i * 2]), "%02x", md_value[i]);  // save string in hex base 16
         hashed_canonical_request[64] = '\0';
-        
+
         str_builder_t *sb;
         sb = str_builder_create();
         str_builder_add_str(sb, algorithm);
@@ -307,9 +307,9 @@ static char *rd_kafka_aws_build_string_to_sign (const char *algorithm,
         str_builder_add_str(sb, credential_scope);
         str_builder_add_str(sb, "\n");
         str_builder_add_str(sb, hashed_canonical_request);
-        
+
         char *string_to_sign = str_builder_dump(sb);
-        
+
         str_builder_destroy(sb);
 
         return string_to_sign;
@@ -319,7 +319,7 @@ static char *rd_kafka_aws_build_string_to_sign (const char *algorithm,
  * @brief Generates a signature
  * @remark signature will be allocated and must be freed.
  */
-static char *rd_kafka_aws_build_signature (const char *aws_secret_access_key, 
+static char *rd_kafka_aws_build_signature (const char *aws_secret_access_key,
                                     const char *aws_region,
                                     const char *ymd,
                                     const char *aws_service,
@@ -331,21 +331,21 @@ static char *rd_kafka_aws_build_signature (const char *aws_secret_access_key,
         str_builder_add_str(sb, "AWS4");
         str_builder_add_str(sb, aws_secret_access_key);
         char *date_key = str_builder_dump(sb);
-        
+
         str_builder_destroy(sb);
-        
+
         unsigned char *hmac_date_key;
         unsigned int hmac_date_key_len = 32;
         hmac_date_key = rd_kafka_aws_hmac_sha256((unsigned char *)date_key, strlen(date_key), (unsigned char *)ymd, strlen(ymd), NULL, NULL);
-        
+
         unsigned char *hmac_date_region_key;
         unsigned int hmac_date_region_key_len = 32;
         hmac_date_region_key = rd_kafka_aws_hmac_sha256(hmac_date_key, hmac_date_key_len, (unsigned char *)aws_region, strlen(aws_region), NULL, NULL);
-      
+
         unsigned char *hmac_date_region_service_key;
         unsigned int hmac_date_region_service_key_len = 32;
         hmac_date_region_service_key = rd_kafka_aws_hmac_sha256(hmac_date_region_key, hmac_date_region_key_len, (unsigned char *)aws_service, strlen(aws_service), NULL, NULL);
-              
+
         unsigned char *hmac_signing_key;
         unsigned int hmac_signing_key_len = 32;
         hmac_signing_key = rd_kafka_aws_hmac_sha256(hmac_date_region_service_key, hmac_date_region_service_key_len, (unsigned char *)"aws4_request", strlen("aws4_request"), NULL, NULL);
@@ -353,16 +353,16 @@ static char *rd_kafka_aws_build_signature (const char *aws_secret_access_key,
         unsigned char *hmac_signature;
         unsigned int hmac_signature_len = 32;
         hmac_signature = rd_kafka_aws_hmac_sha256(hmac_signing_key, hmac_signing_key_len, (unsigned char *)string_to_sign, strlen(string_to_sign), NULL, NULL);
-        
+
         char res_hexstring[65];
         for (i = 0; i < hmac_signature_len; i++)
                sprintf(&(res_hexstring[i * 2]), "%02x", hmac_signature[i]);  // save string in hex base 16
         res_hexstring[64] = '\0';
-        
+
         char *signature = rd_strdup(res_hexstring);
-        
+
         RD_IF_FREE(date_key, rd_free);
-        
+
         return signature;
 }
 
@@ -373,7 +373,7 @@ static char *rd_kafka_aws_build_signature (const char *aws_secret_access_key,
 char *rd_kafka_aws_build_sasl_payload (const char *ymd,
                                 const char *hms,
                                 const char *host,
-                                const char *aws_access_key_id, 
+                                const char *aws_access_key_id,
                                 const char *aws_secret_access_key,
                                 const char *aws_security_token,
                                 const char *aws_region,
@@ -438,13 +438,13 @@ char *rd_kafka_aws_build_sasl_payload (const char *ymd,
         str_builder_add_str(sb, "\"x-amz-date\":\"");
         str_builder_add_str(sb, amz_date);
         str_builder_add_str(sb, "\",");
-        
+
         if (aws_security_token != NULL) {
             str_builder_add_str(sb, "\"x-amz-security-token\":\"");
             str_builder_add_str(sb, aws_security_token);
             str_builder_add_str(sb, "\",");
         }
-        
+
         str_builder_add_str(sb, "\"x-amz-signedheaders\":\"host\",");
         str_builder_add_str(sb, "\"x-amz-expires\":\"900\",");
         str_builder_add_str(sb, "\"x-amz-signature\":\"");
@@ -459,7 +459,7 @@ char *rd_kafka_aws_build_sasl_payload (const char *ymd,
         RD_IF_FREE(credential_scope, rd_free);
         RD_IF_FREE(string_to_sign, rd_free);
         RD_IF_FREE(signature, rd_free);
-        
+
         return sasl_payload;
 }
 
@@ -486,6 +486,7 @@ static rd_http_error_t * rd_kafka_aws_http_get(char * url, char ** result) {
 #define AWS_METADATA_BASE_URL "http://localhost:8080"
 #define AWS_METADATA_SECURITY_CREDENTIALS_URL AWS_METADATA_BASE_URL"/latest/meta-data/iam/security-credentials/"
 #define AWS_METADATA_AZ_URL AWS_METADATA_BASE_URL"/latest/meta-data/placement/availability-zone"
+
 
 
 int rd_kafka_aws_region_from_metadata(rd_kafka_t *rk,
@@ -670,7 +671,7 @@ static int unittest_build_sasl_payload (void) {
 
         char *expected_canonical_querystring = "Action=kafka-cluster%3AConnect&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AWS_ACCESS_KEY_ID%2F20100101%2Fus-east-1%2Fkafka-cluster%2Faws4_request&X-Amz-Date=20100101T000000Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host";
         RD_UT_ASSERT(strcmp(expected_canonical_querystring, canonical_querystring) == 0, "expected: %s\nactual: %s", expected_canonical_querystring, canonical_querystring);
-        
+
         char *sasl_payload = rd_kafka_aws_build_sasl_payload(
                 ymd,
                 hms,
@@ -688,8 +689,8 @@ static int unittest_build_sasl_payload (void) {
                 request_parameters,
                 md
         );
-        
-        const char *expected = 
+
+        const char *expected =
             "{\"version\":\"2020_10_22\",\"host\":\"hostname\","
             "\"user-agent\":\"librdkafka\",\"action\":\"kafka-cluster:Connect\","
             "\"x-amz-algorithm\":\"AWS4-HMAC-SHA256\","
@@ -699,7 +700,7 @@ static int unittest_build_sasl_payload (void) {
             "\"x-amz-expires\":\"900\","
             "\"x-amz-signature\":\"d3eeeddfb2c2b76162d583d7499c2364eb9a92b248218e31866659b18997ef44\"}";
         RD_UT_ASSERT(strcmp(expected, sasl_payload) == 0, "expected: %s\nactual: %s", expected, sasl_payload);
-        
+
         RD_IF_FREE(sasl_payload, rd_free);
         RD_UT_PASS();
 }
@@ -757,7 +758,7 @@ static int unittest_build_sts_request (void) {
         // printf("DEBUGGING: string to sign\n%s\n", string_to_sign);
         char *expected_string_to_sign = "AWS4-HMAC-SHA256\n20210910T190714Z\n20210910/us-east-1/sts/aws4_request\nd66dff688ce93a268731fee21e3751669e2c27b8b54ce6d2d627b2c6f7049a7f";
         RD_UT_ASSERT(strcmp(string_to_sign, expected_string_to_sign) == 0, "expected: %s\nactual: %s", expected_string_to_sign, string_to_sign);
-        
+
         char *signature = rd_kafka_aws_build_signature(
                 aws_secret_access_key,
                 aws_region,
@@ -845,10 +846,10 @@ static int unittest_build_signature (void) {
                 aws_service,
                 string_to_sign
         );
-        
+
         const char *expected = "d3eeeddfb2c2b76162d583d7499c2364eb9a92b248218e31866659b18997ef44";
         RD_UT_ASSERT(strcmp(expected, signature) == 0, "expected: %s\nactual: %s", expected, signature);
-    
+
         RD_IF_FREE(canonical_request, rd_free);
         RD_IF_FREE(string_to_sign, rd_free);
         RD_IF_FREE(signature, rd_free);
@@ -860,9 +861,9 @@ static int unittest_build_signature (void) {
 /**
  * @brief Verify that a canonical request can be formed properly.
  */
-static int unittest_build_canonical_request_with_security_token (void) {       
+static int unittest_build_canonical_request_with_security_token (void) {
         RD_UT_BEGIN();
-        
+
         const EVP_MD *md = EVP_get_digestbyname("SHA256");
         char *canonical_headers = "host:hostname";
         char *signed_headers = "host";
@@ -880,8 +881,8 @@ static int unittest_build_canonical_request_with_security_token (void) {
                 request_parameters,
                 md
         );
-        
-        const char *expected = 
+
+        const char *expected =
             "GET\n/\n"
             "Action=kafka-cluster%3AConnect&"
             "X-Amz-Algorithm=AWS4-HMAC-SHA256&"
@@ -894,7 +895,7 @@ static int unittest_build_canonical_request_with_security_token (void) {
             "host\n"
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
         RD_UT_ASSERT(strcmp(expected, canonical_request) == 0, "expected: %s\nactual: %s", expected, canonical_request);
-   
+
         RD_IF_FREE(canonical_request, rd_free);
         RD_UT_PASS();
 }
@@ -902,7 +903,7 @@ static int unittest_build_canonical_request_with_security_token (void) {
 /**
  * @brief Verify that a canonical request can be formed properly.
  */
-static int unittest_build_canonical_request (void) {       
+static int unittest_build_canonical_request (void) {
         RD_UT_BEGIN();
 
         const EVP_MD *md = EVP_get_digestbyname("SHA256");
@@ -922,8 +923,8 @@ static int unittest_build_canonical_request (void) {
                 request_parameters,
                 md
         );
-        
-        const char *expected = 
+
+        const char *expected =
             "GET\n/\n"
             "Action=kafka-cluster%3AConnect&"
             "X-Amz-Algorithm=AWS4-HMAC-SHA256&"
@@ -935,7 +936,7 @@ static int unittest_build_canonical_request (void) {
             "host\n"
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
         RD_UT_ASSERT(strcmp(expected, canonical_request) == 0, "expected: %s\nactual: %s", expected, canonical_request);
-   
+
         RD_IF_FREE(canonical_request, rd_free);
         RD_UT_PASS();
 }
@@ -947,7 +948,7 @@ static int unittest_uri_encode (void) {
         RD_UT_BEGIN();
         int test_str_size = strlen("testString-123/*&") + 1;
         char *test_str;
-        
+
         test_str = rd_malloc(test_str_size);
         rd_snprintf(test_str, test_str_size, "testString-123/*&");
 

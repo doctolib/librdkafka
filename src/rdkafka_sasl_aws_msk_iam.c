@@ -386,7 +386,7 @@ rd_kafka_aws_msk_iam_set_credential_failure (rd_kafka_t *rk, const char *errstr)
  * @brief SASL/AWS_MSK_IAM credential refresher used for retrieving new temporary
  * credentials from AWS STS service. The refresher will make use of the regional STS
  * endpoints as per https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_enable-regions.html.
- * 
+ *
  * If STS is not used and permanent credentials are provided, the refresher essentially performs a NOOP
  * and will not update the AWS credential information.
  */
@@ -471,18 +471,18 @@ rd_kafka_aws_msk_iam_enqueue_credential_refresh_if_necessary (
 
 /**
  * @brief Build client first message
- * 
+ *
  *        Builds the first message for the payload
  *        by combining canonical request, signature, and credentials.
  *
  * @remark out->ptr is allocated and will need to be freed.
  */
-static void 
+static void
 rd_kafka_sasl_aws_msk_iam_build_client_first_message (
-        rd_kafka_transport_t *rktrans, 
+        rd_kafka_transport_t *rktrans,
         rd_chariov_t *out) {
         struct rd_kafka_sasl_aws_msk_iam_state *state = rktrans->rktrans_sasl.state;
-        
+
         char *aws_service = "kafka-cluster";
         char *algorithm = "AWS4-HMAC-SHA256";
         char *signed_headers = "host";
@@ -533,14 +533,14 @@ rd_kafka_sasl_aws_msk_iam_build_client_first_message (
                            "SASLAWSMSKIAM",
                            "SASL payload calculated as %s",
                            sasl_payload);
-        
+
         /* Save JSON to out pointer for sending */
         out->size = strlen(sasl_payload);
         out->ptr = rd_malloc(out->size + 1);
-        
+
         rd_snprintf(out->ptr, out->size + 1,
                     "%s", sasl_payload);
-        
+
         RD_IF_FREE(ymd, rd_free);
         RD_IF_FREE(hms, rd_free);
         RD_IF_FREE(canonical_querystring, rd_free);
@@ -592,16 +592,16 @@ static int rd_kafka_sasl_aws_msk_iam_fsm (rd_kafka_transport_t *rktrans,
         int r = -1;
         rd_ts_t ts_start = rd_clock();
         int prev_state = state->state;
-        
+
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER, "SASLAWSMSKIAM",
                    "SASL AWS MSK IAM client in state %s",
                    state_names[state->state]);
-        
+
         switch (state->state)
         {
         case RD_KAFKA_SASL_AWS_MSK_IAM_SEND_CLIENT_FIRST_MESSAGE:
             rd_assert(!in); /* Not expecting any server-input */
-            
+
             rd_kafka_sasl_aws_msk_iam_build_client_first_message(rktrans, &out);
             state->state = RD_KAFKA_SASL_AWS_MSK_IAM_RECEIVE_SERVER_RESPONSE;
             break;
@@ -611,20 +611,20 @@ static int rd_kafka_sasl_aws_msk_iam_fsm (rd_kafka_transport_t *rktrans,
                         rktrans, in, errstr, errstr_size);
             break;
         }
-        
+
         if (out.ptr) {
                 r = rd_kafka_sasl_send(rktrans, out.ptr, (int)out.size,
                                        errstr, errstr_size);
                 RD_IF_FREE(out.ptr, rd_free);
         }
-        
+
         ts_start = (rd_clock() - ts_start) / 1000;
         if (ts_start >= 100) {
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER, "SASLAWSMSKIAM",
                            "SASL AWS MSK IAM state %s handled in %"PRId64"ms",
                            state_names[prev_state], ts_start);
         }
-        
+
         return r;
 }
 
@@ -652,7 +652,7 @@ static int rd_kafka_sasl_aws_msk_iam_client_new (rd_kafka_transport_t *rktrans,
                 rktrans->rktrans_rkb->rkb_rk->rk_sasl.handle;
         struct rd_kafka_sasl_aws_msk_iam_state *state;
         const rd_kafka_conf_t *conf = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
-        
+
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER, "SASLAWSMSKIAM",
                    "SASL AWS MSK IAM new client initializing");
 
@@ -688,13 +688,13 @@ static int rd_kafka_sasl_aws_msk_iam_client_new (rd_kafka_transport_t *rktrans,
         state->aws_access_key_id = rd_strdup(handle->aws_access_key_id);
         state->aws_secret_access_key = rd_strdup(handle->aws_secret_access_key);
         state->aws_region = rd_strdup(handle->aws_region);
-        
+
         if (conf->sasl.aws_security_token != NULL) {
             state->aws_security_token = rd_strdup(handle->aws_security_token);
         }
 
         rwlock_rdunlock(&handle->lock);
-        
+
         /* Kick off the FSM */
         return rd_kafka_sasl_aws_msk_iam_fsm(rktrans, NULL, errstr, errstr_size);
 }
@@ -819,7 +819,6 @@ static void rd_kafka_sasl_aws_msk_iam_close (rd_kafka_transport_t *rktrans) {
 static int rd_kafka_sasl_aws_msk_iam_conf_validate (rd_kafka_t *rk,
                                               char *errstr,
                                               size_t errstr_size) {
-
         if (!rk->rk_conf.sasl.aws_region && getenv("AWS_DEFAULT_REGION")) {
                 rk->rk_conf.sasl.aws_region = rd_strdup(getenv("AWS_DEFAULT_REGION"));
         }
