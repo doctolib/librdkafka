@@ -819,6 +819,19 @@ static void rd_kafka_sasl_aws_msk_iam_close (rd_kafka_transport_t *rktrans) {
 static int rd_kafka_sasl_aws_msk_iam_conf_validate (rd_kafka_t *rk,
                                               char *errstr,
                                               size_t errstr_size) {
+
+        if (!rk->rk_conf.sasl.aws_region && getenv("AWS_DEFAULT_REGION")) {
+                rk->rk_conf.sasl.aws_region = rd_strdup(getenv("AWS_DEFAULT_REGION"));
+        }
+        if (!rk->rk_conf.sasl.aws_access_key_id && getenv("AWS_ACCESS_KEY_ID")) {
+                rk->rk_conf.sasl.aws_access_key_id = rd_strdup(getenv("AWS_ACCESS_KEY_ID"));
+        }
+        if (!rk->rk_conf.sasl.aws_secret_access_key && getenv("AWS_SECRET_ACCESS_KEY")) {
+                rk->rk_conf.sasl.aws_secret_access_key = rd_strdup(getenv("AWS_SECRET_ACCESS_KEY"));
+        }
+        if (!rk->rk_conf.sasl.aws_security_token && getenv("AWS_SECURITY_TOKEN")) {
+                rk->rk_conf.sasl.aws_security_token = rd_strdup(getenv("AWS_SECURITY_TOKEN"));
+        }
         if (!rk->rk_conf.sasl.aws_access_key_id || !rk->rk_conf.sasl.aws_secret_access_key || !rk->rk_conf.sasl.aws_region) {
                 rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "No AWS Credentials provided, trying to get credentials from metadata API");
                 if (rd_kafka_aws_credentials_from_metadata(rk, errstr, errstr_size) == -1) {
