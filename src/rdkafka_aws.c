@@ -629,8 +629,6 @@ int rd_kafka_aws_credentials_from_metadata(rd_kafka_aws_credential_t *credential
 
                                 credential->aws_security_token = rd_malloc(strlen(aws_security_token) + 1);
                                 strcpy(credential->aws_security_token, aws_security_token);
-
-                                credential->aws_region = NULL;
                         }
                 }
                 else {

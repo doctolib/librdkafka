@@ -127,7 +127,6 @@ static void rd_kafka_sasl_aws_msk_iam_credential_free (
         rd_kafka_aws_credential_t *credential) {
         RD_IF_FREE(credential->aws_access_key_id, rd_free);
         RD_IF_FREE(credential->aws_secret_access_key, rd_free);
-        RD_IF_FREE(credential->aws_region, rd_free);
         RD_IF_FREE(credential->aws_security_token, rd_free);
 
         memset(credential, 0, sizeof(*credential));
@@ -137,12 +136,8 @@ static void rd_kafka_sasl_aws_msk_iam_credential_free (
  * @brief Set SASL/AWS_MSK_IAM token and metadata
  *
  * @param rk Client instance.
- * @param aws_access_key_id Access key id.
- * @param aws_secret_access_key Secret access key.
- * @param aws_region AWS region used in signing and for STS endpoint.
- * @param aws_security_token Temporary AWS security token. Required for using STS.
- *  Use rd_kafka_sasl_aws_msk_iam_credential_free() to free members if
- *  return value is not -1.
+ * @param credential AWS Credentials
+ * @param aws_region AWS Region
  * @param md_lifetime_ms when the credential expires, in terms of the number of
  *  milliseconds since the epoch. See https://currentmillis.com/.
  *
@@ -156,15 +151,12 @@ static void rd_kafka_sasl_aws_msk_iam_credential_free (
  */
 static rd_kafka_resp_err_t
 rd_kafka_aws_msk_iam_set_credential (rd_kafka_t *rk,
-        const char *aws_access_key_id,
-        const char *aws_secret_access_key,
-        const char *aws_region,
-        const char *aws_security_token,
-        int64_t md_lifetime_ms,
+        rd_kafka_aws_credential_t * credential,
+        const char * aws_region,
         char *errstr, size_t errstr_size) {
         rd_kafka_sasl_aws_msk_iam_handle_t *handle = rk->rk_sasl.handle;
         rd_ts_t now_wallclock;
-        rd_ts_t wts_md_lifetime = md_lifetime_ms * 1000;
+        rd_ts_t wts_md_lifetime = credential->md_lifetime_ms * 1000;
 
         /* Check if SASL/AWS_MSK_IAM is the configured auth mechanism */
         if (rk->rk_conf.sasl.provider != &rd_kafka_sasl_aws_msk_iam_provider ||
@@ -187,16 +179,16 @@ rd_kafka_aws_msk_iam_set_credential (rd_kafka_t *rk,
         rwlock_wrlock(&handle->lock);
 
         RD_IF_FREE(handle->aws_access_key_id, rd_free);
-        handle->aws_access_key_id = rd_strdup(aws_access_key_id);
+        handle->aws_access_key_id = rd_strdup(credential->aws_access_key_id);
 
         RD_IF_FREE(handle->aws_secret_access_key, rd_free);
-        handle->aws_secret_access_key = rd_strdup(aws_secret_access_key);
+        handle->aws_secret_access_key = rd_strdup(credential->aws_secret_access_key);
 
         RD_IF_FREE(handle->aws_region, rd_free);
         handle->aws_region = rd_strdup(aws_region);
 
         RD_IF_FREE(handle->aws_security_token, rd_free);
-        handle->aws_security_token = rd_strdup(aws_security_token);
+        handle->aws_security_token = rd_strdup(credential->aws_security_token);
 
         handle->wts_md_lifetime = wts_md_lifetime;
 
@@ -267,18 +259,20 @@ rd_kafka_aws_msk_iam_set_credential_failure (rd_kafka_t *rk, const char *errstr)
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+/**
+ * @brief SASL/AWS_MSK_IAM credential refresh using AWS Metadata API.
+ */
 static int rd_kafka_aws_refresh_with_metadata(
                 rd_kafka_t *rk,
                 char *errstr, size_t errstr_size) {
         rd_kafka_aws_credential_t credential;
         if (rd_kafka_aws_credentials_from_metadata(&credential, errstr, errstr_size) == -1
-                || rd_kafka_aws_msk_iam_set_credential(rk, credential.aws_access_key_id, credential.aws_secret_access_key,
-                        rk->rk_conf.sasl.aws_region, credential.aws_security_token, credential.md_lifetime_ms,
-                        errstr, errstr_size) == -1) {
+                || rd_kafka_aws_msk_iam_set_credential(rk, &credential, rk->rk_conf.sasl.aws_region, errstr, errstr_size) == -1) {
                 rd_kafka_sasl_aws_msk_iam_credential_free(&credential);
                 rd_kafka_aws_msk_iam_set_credential_failure(rk, errstr);
                 return -1;
         }
+        rd_kafka_sasl_aws_msk_iam_credential_free(&credential);
         return 0;
 }
 
@@ -443,7 +437,7 @@ rd_kafka_sasl_aws_msk_iam_build_client_first_message (
 
 /**
  * @brief Handle server-response
- * 
+ *
  *        This is the end of authentication and the AWS MSK IAM state
  *        will be freed at the end of this function regardless of
  *        authentication outcome.

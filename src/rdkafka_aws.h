@@ -40,7 +40,6 @@
 typedef struct rd_kafka_aws_credential_s {
         char *aws_access_key_id;
         char *aws_secret_access_key;
-        char *aws_region;
         char *aws_security_token;
         int64_t md_lifetime_ms;
 } rd_kafka_aws_credential_t;
