@@ -481,9 +481,8 @@ static rd_http_error_t * rd_kafka_aws_http_get(char * url, char ** result) {
         return herr;
 }
 
-// #define AWS_METADATA_BASE_URL http://169.254.169.254
-
-#define AWS_METADATA_BASE_URL "http://localhost:8080"
+#define AWS_METADATA_BASE_URL "http://169.254.169.254"
+// #define AWS_METADATA_BASE_URL "http://localhost:8080"
 #define AWS_METADATA_SECURITY_CREDENTIALS_URL AWS_METADATA_BASE_URL"/latest/meta-data/iam/security-credentials/"
 #define AWS_METADATA_AZ_URL AWS_METADATA_BASE_URL"/latest/meta-data/placement/availability-zone"
 
@@ -620,7 +619,7 @@ int rd_kafka_aws_credentials_from_metadata(rd_kafka_aws_credential_t *credential
                                 expiration_time.tm_isdst =-1;
 
                                 credential->md_lifetime_ms = ((int64_t) (mktime(&expiration_time) - timezone)) * 1000;
-                                printf("Metadata token valid until %s %lu\n", expiration, credential->md_lifetime_ms);
+                                printf("Metadata token valid until %s %lld\n", expiration, credential->md_lifetime_ms);
 
                                 credential->aws_access_key_id = rd_malloc(strlen(aws_access_key_id) + 1);
                                 strcpy(credential->aws_access_key_id, aws_access_key_id);
