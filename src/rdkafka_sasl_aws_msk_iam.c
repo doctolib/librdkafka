@@ -54,6 +54,8 @@
 #error "WITH_SSL (OpenSSL) is required for SASL AWS MSK IAM"
 #endif
 
+#define AWS_REFRESH_NO_REFRESH 0
+#define AWS_REFRESH_METADATA 1
 
 /**
  * @struct Per-client-instance SASL/AWS_MSK_IAM handle.
@@ -201,7 +203,8 @@ rd_kafka_aws_msk_iam_set_credential (rd_kafka_t *rk,
         /* Schedule a refresh 80% through its remaining lifetime */
         handle->wts_refresh_after =
                 (rd_ts_t)(now_wallclock + 0.8 *
-                          (wts_md_lifetime - now_wallclock));
+                        (wts_md_lifetime - now_wallclock));
+        printf("Next refresh %lld\n", handle->wts_refresh_after);
 
         RD_IF_FREE(handle->errstr, rd_free);
         handle->errstr = NULL;
@@ -382,6 +385,22 @@ rd_kafka_aws_msk_iam_set_credential_failure (rd_kafka_t *rk, const char *errstr)
 //         return r;
 // }
 
+static int rd_kafka_aws_refresh_with_metadata(
+                rd_kafka_t *rk,
+                char *errstr, size_t errstr_size) {
+        rd_kafka_sasl_aws_msk_iam_handle_t *handle = rk->rk_sasl.handle;
+        rd_kafka_aws_credential_t credential;
+        if (rd_kafka_aws_credentials_from_metadata(&credential, errstr, errstr_size) == -1
+                || rd_kafka_aws_msk_iam_set_credential(rk, credential.aws_access_key_id, credential.aws_secret_access_key,
+                        rk->rk_conf.sasl.aws_region, credential.aws_security_token, credential.md_lifetime_ms,
+                        errstr, errstr_size) == -1) {
+                rd_kafka_sasl_aws_msk_iam_credential_free(&credential);
+                rd_kafka_aws_msk_iam_set_credential_failure(rk, errstr);
+                return -1;
+        }
+        return 0;
+}
+
 /**
  * @brief SASL/AWS_MSK_IAM credential refresher used for retrieving new temporary
  * credentials from AWS STS service. The refresher will make use of the regional STS
@@ -396,21 +415,14 @@ rd_kafka_aws_msk_iam_credential_refresh (rd_kafka_t *rk, void *opaque) {
         rd_kafka_aws_credential_t credential = RD_ZERO_INIT;
 
         rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Refreshing AWS credentials");
-
-        // if (rk->rk_conf.sasl.enable_use_sts) {
-        //         // if (rd_kafka_aws_msk_iam_credential_refresh0(
-        //         //         rk, &credential,
-        //         //         rd_uclock() / 1000, errstr, sizeof(errstr)) == -1 ||
-        //         //     rd_kafka_aws_msk_iam_set_credential(
-        //         //         rk, credential.aws_access_key_id,
-        //         //         credential.aws_secret_access_key, credential.aws_region,
-        //         //         credential.aws_security_token, credential.md_lifetime_ms,
-        //         //         errstr, sizeof(errstr)) == -1) {
-        //         //         rd_kafka_aws_msk_iam_set_credential_failure(rk, errstr);
-        //         // }
-        // } else {
-                rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Use STS not enabled, will not refresh credentials");
-        // }
+        if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_METADATA) {
+                rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Refresh AWS creds from metadata API");
+                if (rd_kafka_aws_refresh_with_metadata(rk, errstr, sizeof(errstr)) == -1) {
+                        rd_kafka_aws_msk_iam_set_credential_failure(rk, errstr);
+                }
+        } else {
+                rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "No refresh needed");
+        }
         rd_kafka_sasl_aws_msk_iam_credential_free(&credential);
 }
 
@@ -648,7 +660,7 @@ static int rd_kafka_sasl_aws_msk_iam_recv (rd_kafka_transport_t *rktrans,
 static int rd_kafka_sasl_aws_msk_iam_client_new (rd_kafka_transport_t *rktrans,
                                     const char *hostname,
                                     char *errstr, size_t errstr_size) {
-        rd_kafka_sasl_aws_msk_iam_handle_t *handle = 
+        rd_kafka_sasl_aws_msk_iam_handle_t *handle =
                 rktrans->rktrans_rkb->rkb_rk->rk_sasl.handle;
         struct rd_kafka_sasl_aws_msk_iam_state *state;
         const rd_kafka_conf_t *conf = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
@@ -689,7 +701,7 @@ static int rd_kafka_sasl_aws_msk_iam_client_new (rd_kafka_transport_t *rktrans,
         state->aws_secret_access_key = rd_strdup(handle->aws_secret_access_key);
         state->aws_region = rd_strdup(handle->aws_region);
 
-        if (conf->sasl.aws_security_token != NULL) {
+        if (handle->aws_secret_access_key != NULL) {
             state->aws_security_token = rd_strdup(handle->aws_security_token);
         }
 
@@ -750,26 +762,28 @@ static int rd_kafka_sasl_aws_msk_iam_init (rd_kafka_t *rk,
         // int refresh_sec = conf->sasl.duration_sec;
         // rd_ts_t wts_md_lifetime = (rd_ts_t)(now_wallclock + ((refresh_sec) * 1000 * 1000));
 
-        rwlock_wrlock(&handle->lock);
 
-        handle->aws_access_key_id = rd_strdup(conf->sasl.aws_access_key_id);
-        handle->aws_secret_access_key = rd_strdup(conf->sasl.aws_secret_access_key);
-        handle->aws_region = rd_strdup(conf->sasl.aws_region);
+        if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_NO_REFRESH) {
+                rwlock_wrlock(&handle->lock);
+                handle->aws_access_key_id = rd_strdup(conf->sasl.aws_access_key_id);
+                handle->aws_secret_access_key = rd_strdup(conf->sasl.aws_secret_access_key);
+                handle->aws_region = rd_strdup(conf->sasl.aws_region);
 
-        if (conf->sasl.aws_security_token != NULL) {
-            handle->aws_security_token = rd_strdup(conf->sasl.aws_security_token);
+                if (conf->sasl.aws_security_token != NULL) {
+                        handle->aws_security_token = rd_strdup(conf->sasl.aws_security_token);
+                }
+                rwlock_wrunlock(&handle->lock);
+        }
+        else if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_METADATA) {
+                if (rd_kafka_aws_refresh_with_metadata(rk, errstr, errstr_size) != 0) {
+                        return RD_KAFKA_RESP_ERR__STATE;
+                }
+        } else {
+                rd_snprintf(errstr, errstr_size, "Wrong aws refresh kind: %d",rk->rk_conf.sasl.aws_refresh_kind);
+                return RD_KAFKA_RESP_ERR__STATE;
         }
 
-        // handle->wts_md_lifetime = wts_md_lifetime;
-
-        // /* Schedule a refresh 80% through its remaining lifetime */
-        // handle->wts_refresh_after =
-        //         (rd_ts_t)(now_wallclock + 0.8 *
-        //                   (wts_md_lifetime - now_wallclock));
-        
         handle->errstr = NULL;
-
-        rwlock_wrunlock(&handle->lock);
 
         return 0;
 }
@@ -819,6 +833,7 @@ static void rd_kafka_sasl_aws_msk_iam_close (rd_kafka_transport_t *rktrans) {
 static int rd_kafka_sasl_aws_msk_iam_conf_validate (rd_kafka_t *rk,
                                               char *errstr,
                                               size_t errstr_size) {
+        rk->rk_conf.sasl.aws_refresh_kind = AWS_REFRESH_NO_REFRESH;
         if (!rk->rk_conf.sasl.aws_region && getenv("AWS_DEFAULT_REGION")) {
                 rk->rk_conf.sasl.aws_region = rd_strdup(getenv("AWS_DEFAULT_REGION"));
         }
@@ -831,16 +846,22 @@ static int rd_kafka_sasl_aws_msk_iam_conf_validate (rd_kafka_t *rk,
         if (!rk->rk_conf.sasl.aws_security_token && getenv("AWS_SECURITY_TOKEN")) {
                 rk->rk_conf.sasl.aws_security_token = rd_strdup(getenv("AWS_SECURITY_TOKEN"));
         }
-        if (!rk->rk_conf.sasl.aws_access_key_id || !rk->rk_conf.sasl.aws_secret_access_key || !rk->rk_conf.sasl.aws_region) {
-                rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "No AWS Credentials provided, trying to get credentials from metadata API");
-                if (rd_kafka_aws_credentials_from_metadata(rk, errstr, errstr_size) == -1) {
-                        return -1;
-                }
-        }
         if (!rk->rk_conf.sasl.aws_region) {
                 rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "No AWS Region provided, trying to get it from metadata API");
-                if (rd_kafka_aws_region_from_metadata(rk, errstr, errstr_size) == -1) {
-                        return -1;
+                char * region = rd_kafka_aws_region_from_metadata(errstr, errstr_size);
+                if (region != NULL) {
+                        rk->rk_conf.sasl.aws_region = rd_strdup(region);
+                        RD_IF_FREE(region, rd_free);
+                }
+        }
+        if (!rk->rk_conf.sasl.aws_access_key_id || !rk->rk_conf.sasl.aws_secret_access_key || !rk->rk_conf.sasl.aws_region) {
+                rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "No AWS Credentials provided, trying to get credentials from metadata API");
+                rd_kafka_aws_credential_t credential;
+                if (rd_kafka_aws_credentials_from_metadata(&credential, errstr, errstr_size) == 0) {
+                        rk->rk_conf.sasl.aws_refresh_kind = AWS_REFRESH_METADATA;
+                        rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "AWD Credentials found in the metadata API");
+                        rd_kafka_sasl_aws_msk_iam_credential_free(&credential);
+                        return 0;
                 }
         }
         if (!rk->rk_conf.sasl.aws_access_key_id || !rk->rk_conf.sasl.aws_secret_access_key || !rk->rk_conf.sasl.aws_region) {

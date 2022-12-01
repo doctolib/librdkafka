@@ -71,11 +71,10 @@ char *rd_kafka_aws_build_sasl_payload (
         const char *request_parameters,
         const EVP_MD *md);
 int rd_kafka_aws_credentials_from_metadata(
-        rd_kafka_t *rk,
+        rd_kafka_aws_credential_t *credential,
         char *errstr,
         size_t errstr_size);
-int rd_kafka_aws_region_from_metadata(
-        rd_kafka_t *rk,
+char * rd_kafka_aws_region_from_metadata(
         char *errstr,
         size_t errstr_size);
 

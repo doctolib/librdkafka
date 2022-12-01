@@ -291,7 +291,8 @@ struct rd_kafka_conf_s {
                 char *aws_access_key_id;
                 char *aws_secret_access_key;
                 char *aws_region;
-                char *aws_security_token;  /* needed for STS AssumeRole */
+                char *aws_security_token;
+                int aws_refresh_kind;
 #endif
                 char *oauthbearer_config;
                 int enable_oauthbearer_unsecure_jwt;

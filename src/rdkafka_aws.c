@@ -487,22 +487,16 @@ static rd_http_error_t * rd_kafka_aws_http_get(char * url, char ** result) {
 #define AWS_METADATA_SECURITY_CREDENTIALS_URL AWS_METADATA_BASE_URL"/latest/meta-data/iam/security-credentials/"
 #define AWS_METADATA_AZ_URL AWS_METADATA_BASE_URL"/latest/meta-data/placement/availability-zone"
 
-
-
-int rd_kafka_aws_region_from_metadata(rd_kafka_t *rk,
-                                           char *errstr,
-                                           size_t errstr_size) {
-        int result = 0;
+char * rd_kafka_aws_region_from_metadata(char *errstr, size_t errstr_size) {
+        char * result = NULL;
         rd_http_error_t *herr = NULL;
         char * raw = NULL;
         herr = rd_kafka_aws_http_get(AWS_METADATA_AZ_URL, &raw);
         if (!herr) {
                 // strip the zone name
                 raw[strlen(raw) - 1] = '\0';
-                RD_IF_FREE(rk->rk_conf.sasl.aws_region, rd_free);
-                rk->rk_conf.sasl.aws_region = rd_strdup(raw);
-
-                rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "Region set from metadata API: %s", raw);
+                result = rd_malloc(strlen(raw) + 1);
+                strcpy(result, raw);
                 rd_http_error_destroy(herr);
         }
         RD_IF_FREE(herr, rd_free);
@@ -511,7 +505,7 @@ int rd_kafka_aws_region_from_metadata(rd_kafka_t *rk,
         return result;
 }
 
-int rd_kafka_aws_credentials_from_metadata(rd_kafka_t *rk,
+int rd_kafka_aws_credentials_from_metadata(rd_kafka_aws_credential_t *credential,
                                            char *errstr,
                                            size_t errstr_size) {
         int result = 0;
@@ -519,8 +513,9 @@ int rd_kafka_aws_credentials_from_metadata(rd_kafka_t *rk,
         rd_http_error_t *herr2 = NULL;
         cJSON *jsonp = NULL;
 
-        cJSON *json_code, *json_aws_access_key_id, *json_aws_secret_access_key, *json_aws_security_token;
-        char *code, *aws_access_key_id, *aws_secret_access_key, *aws_security_token;
+        cJSON *json_code, *json_aws_access_key_id, *json_aws_secret_access_key, *json_aws_security_token, *json_expiration;
+        char *code, *aws_access_key_id, *aws_secret_access_key, *aws_security_token, *expiration;
+        struct tm expiration_time;
 
         char * raw = NULL;
         char * url2 = NULL;
@@ -532,7 +527,6 @@ int rd_kafka_aws_credentials_from_metadata(rd_kafka_t *rk,
                 url2 = rd_malloc(sizeof(AWS_METADATA_SECURITY_CREDENTIALS_URL) + strlen(raw) + 1);
                 sprintf(url2, "%s%s", AWS_METADATA_SECURITY_CREDENTIALS_URL, raw);
 
-                rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "Calling metadata API on the URL: %s", url2);
                 herr2 = rd_kafka_aws_http_get(url2, &raw2);
 
                 if (!herr2) {
@@ -600,28 +594,55 @@ int rd_kafka_aws_credentials_from_metadata(rd_kafka_t *rk,
                                         goto done;
                                 }
 
-                                RD_IF_FREE(rk->rk_conf.sasl.aws_access_key_id, rd_free);
-                                rk->rk_conf.sasl.aws_access_key_id = rd_strdup(aws_access_key_id);
+                                json_expiration = cJSON_GetObjectItem(jsonp, "Expiration");
+                                if (json_expiration == NULL) {
+                                        rd_snprintf(errstr, errstr_size, "Unable to parse JSON from metadata API");
+                                        result = -1;
+                                        goto done;
+                                }
 
-                                RD_IF_FREE(rk->rk_conf.sasl.aws_secret_access_key, rd_free);
-                                rk->rk_conf.sasl.aws_secret_access_key = rd_strdup(aws_secret_access_key);
+                                expiration = cJSON_GetStringValue(json_expiration);
+                                if (expiration == NULL) {
+                                        rd_snprintf(errstr, errstr_size, "Unable to parse JSON from metadata API");
+                                        result = -1;
+                                        goto done;
+                                }
 
-                                RD_IF_FREE(rk->rk_conf.sasl.aws_security_token, rd_free);
-                                rk->rk_conf.sasl.aws_security_token = rd_strdup(aws_security_token);
+                                if (sscanf(expiration, "%04d-%02d-%02dT%02d:%02d:%02dZ",
+                                        &expiration_time.tm_year, &expiration_time.tm_mon, &expiration_time.tm_mday,
+                                        &expiration_time.tm_hour, &expiration_time.tm_min, &expiration_time.tm_sec) != 6) {
+                                        rd_snprintf(errstr, errstr_size, "Unable to parse JSON from metadata API");
+                                        result = -1;
+                                        goto done;
+                                }
+                                expiration_time.tm_mon  -= 1;
+	                        expiration_time.tm_year -= 1900;
+                                expiration_time.tm_isdst =-1;
 
-                                rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "Creds initialized from Metadata API");
-                                printf("FOO %s %s %s\n", aws_access_key_id, aws_secret_access_key, aws_security_token);
+                                credential->md_lifetime_ms = ((int64_t) (mktime(&expiration_time) - timezone)) * 1000;
+                                printf("Metadata token valid until %s %lu\n", expiration, credential->md_lifetime_ms);
+
+                                credential->aws_access_key_id = rd_malloc(strlen(aws_access_key_id) + 1);
+                                strcpy(credential->aws_access_key_id, aws_access_key_id);
+
+                                credential->aws_secret_access_key = rd_malloc(strlen(aws_secret_access_key) + 1);
+                                strcpy(credential->aws_secret_access_key, aws_secret_access_key);
+
+                                credential->aws_security_token = rd_malloc(strlen(aws_security_token) + 1);
+                                strcpy(credential->aws_security_token, aws_security_token);
+
+                                credential->aws_region = NULL;
                         }
                 }
                 else {
                         rd_http_error_destroy(herr2);
-                        rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "Error calling the metdata API with url: %s", raw);
                         result = -1;
                         goto done;
                 }
         }
         else {
                 rd_http_error_destroy(herr);
+                result = -1;
         }
 done:
         RD_IF_FREE(url2, rd_free);
