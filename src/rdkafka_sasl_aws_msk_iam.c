@@ -267,128 +267,9 @@ rd_kafka_aws_msk_iam_set_credential_failure (rd_kafka_t *rk, const char *errstr)
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-// static int
-// rd_kafka_aws_msk_iam_credential_refresh0 (
-//                                 rd_kafka_t *rk,
-//                                 rd_kafka_aws_credential_t *credential,
-//                                 int64_t now_wallclock_ms,
-//                                 char *errstr, size_t errstr_size) {
-//         const rd_kafka_conf_t *conf = &rk->rk_conf;
-//         rd_kafka_sasl_aws_msk_iam_handle_t *handle = rk->rk_sasl.handle;
-
-//         // str_builder_t *sb;
-//         // sb = str_builder_create();
-
-//         int r = -1;
-//         // char *handle_aws_access_key_id;
-//         // char *handle_aws_secret_access_key;
-//         // char *handle_aws_region;
-//         // char *handle_aws_security_token = NULL;
-//         // memset(credential, 0, sizeof(*credential));
-
-//         // time_t t = time(&t);
-//         // struct tm *tmp = gmtime(&t);  // must use UTC time
-//         // char *ymd = rd_malloc(sizeof(char) * 9);
-//         // char *hms = rd_malloc(sizeof(char) * 7);
-//         // strftime(ymd, sizeof(char) * 9, "%Y%m%d", tmp);
-//         // strftime(hms, sizeof(char) * 7, "%H%M%S", tmp);
-
-//         // rwlock_wrlock(&handle->lock);
-//         // handle_aws_access_key_id = rd_strdup(handle->aws_access_key_id);
-//         // handle_aws_secret_access_key = rd_strdup(handle->aws_secret_access_key);
-//         // handle_aws_region = rd_strdup(handle->aws_region);
-//         // handle_aws_security_token = rd_strdup(handle->aws_security_token);
-
-//         // /* parameters to build request_parameters */
-//         // char *role_arn = rd_kafka_aws_uri_encode(conf->sasl.role_arn);
-//         // char *role_session_name = rd_strdup(conf->sasl.role_session_name);
-
-//         // char duration_sec[256];
-//         // rd_snprintf(duration_sec, sizeof(duration_sec), "%d", conf->sasl.duration_sec);
-//         // char *action = "AssumeRole";
-//         // char *version = "2011-06-15";
-//         // /******************************************/
-//         // rwlock_wrunlock(&handle->lock);
-
-//         // char *host = "sts.amazonaws.com";
-//         // char *aws_service = "sts";
-//         // char *method = "POST";
-//         // char *algorithm = "AWS4-HMAC-SHA256";
-//         // const EVP_MD *md = EVP_get_digestbyname("SHA256");
-//         // char *signed_headers = "content-length;content-type;host;x-amz-date";
-
-//         // str_builder_add_str(sb, "Action=");
-//         // str_builder_add_str(sb, action);
-//         // str_builder_add_str(sb, "&DurationSeconds=");
-//         // str_builder_add_str(sb, duration_sec);
-//         // str_builder_add_str(sb, "&RoleArn=");
-//         // str_builder_add_str(sb, role_arn);
-//         // str_builder_add_str(sb, "&RoleSessionName=");
-//         // str_builder_add_str(sb, role_session_name);
-//         // str_builder_add_str(sb, "&Version=");
-//         // str_builder_add_str(sb, version);
-//         // char *request_parameters = str_builder_dump(sb);
-//         // str_builder_clear(sb);
-
-//         // char content_length[256];
-//         // rd_snprintf(content_length, sizeof(content_length), "%zu", strlen(request_parameters));
-//         // str_builder_add_str(sb, "content-length:");
-//         // str_builder_add_str(sb, content_length);
-//         // str_builder_add_str(sb, "\n");
-//         // str_builder_add_str(sb, "content-type:application/x-www-form-urlencoded; charset=utf-8");
-//         // str_builder_add_str(sb, "\n");
-//         // str_builder_add_str(sb, "host:");
-//         // str_builder_add_str(sb, host);
-//         // str_builder_add_str(sb, "\n");
-//         // str_builder_add_str(sb, "x-amz-date:");
-//         // str_builder_add_str(sb, ymd);
-//         // str_builder_add_str(sb, "T");
-//         // str_builder_add_str(sb, hms);
-//         // str_builder_add_str(sb, "Z");
-//         // char *canonical_headers = str_builder_dump(sb);
-
-//         // str_builder_destroy(sb);
-
-//         // credential->aws_region = rd_strdup(handle_aws_region);
-//         // credential->md_lifetime_ms = now_wallclock_ms + conf->sasl.duration_sec * 1000;
-//         // int check = rd_kafka_aws_send_request(credential,
-//         //                                 ymd,
-//         //                                 hms,
-//         //                                 host,
-//         //                                 handle_aws_access_key_id,
-//         //                                 handle_aws_secret_access_key,
-//         //                                 handle_aws_security_token,
-//         //                                 handle_aws_region,
-//         //                                 aws_service,
-//         //                                 method,
-//         //                                 algorithm,
-//         //                                 canonical_headers,
-//         //                                 signed_headers,
-//         //                                 request_parameters,
-//         //                                 md);
-
-//         // if (r == -1) {
-//         //         rd_kafka_sasl_aws_msk_iam_credential_free(credential);
-//         // }
-
-//         // RD_IF_FREE(handle_aws_access_key_id, rd_free);
-//         // RD_IF_FREE(handle_aws_secret_access_key, rd_free);
-//         // RD_IF_FREE(handle_aws_region, rd_free);
-//         // RD_IF_FREE(handle_aws_security_token, rd_free);
-//         // RD_IF_FREE(ymd, rd_free);
-//         // RD_IF_FREE(hms, rd_free);
-//         // RD_IF_FREE(role_session_name, rd_free);
-//         // RD_IF_FREE(role_arn, rd_free);
-//         // RD_IF_FREE(canonical_headers, rd_free);
-//         // RD_IF_FREE(request_parameters, rd_free);
-
-//         return r;
-// }
-
 static int rd_kafka_aws_refresh_with_metadata(
                 rd_kafka_t *rk,
                 char *errstr, size_t errstr_size) {
-        rd_kafka_sasl_aws_msk_iam_handle_t *handle = rk->rk_sasl.handle;
         rd_kafka_aws_credential_t credential;
         if (rd_kafka_aws_credentials_from_metadata(&credential, errstr, errstr_size) == -1
                 || rd_kafka_aws_msk_iam_set_credential(rk, credential.aws_access_key_id, credential.aws_secret_access_key,
@@ -663,7 +544,6 @@ static int rd_kafka_sasl_aws_msk_iam_client_new (rd_kafka_transport_t *rktrans,
         rd_kafka_sasl_aws_msk_iam_handle_t *handle =
                 rktrans->rktrans_rkb->rkb_rk->rk_sasl.handle;
         struct rd_kafka_sasl_aws_msk_iam_state *state;
-        const rd_kafka_conf_t *conf = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER, "SASLAWSMSKIAM",
                    "SASL AWS MSK IAM new client initializing");
@@ -733,7 +613,6 @@ static int rd_kafka_sasl_aws_msk_iam_init (rd_kafka_t *rk,
                                            char *errstr, size_t errstr_size) {
         rd_kafka_sasl_aws_msk_iam_handle_t *handle;
         const rd_kafka_conf_t *conf = &rk->rk_conf;
-        rd_ts_t now_wallclock;
 
         handle = rd_calloc(1, sizeof(*handle));
         rk->rk_sasl.handle = handle;
@@ -757,11 +636,6 @@ static int rd_kafka_sasl_aws_msk_iam_init (rd_kafka_t *rk,
                             "configured authentication mechanism");
                 return RD_KAFKA_RESP_ERR__STATE;
         }
-
-        // now_wallclock = rd_uclock();
-        // int refresh_sec = conf->sasl.duration_sec;
-        // rd_ts_t wts_md_lifetime = (rd_ts_t)(now_wallclock + ((refresh_sec) * 1000 * 1000));
-
 
         if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_NO_REFRESH) {
                 rwlock_wrlock(&handle->lock);
