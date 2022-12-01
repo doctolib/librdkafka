@@ -926,6 +926,23 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws_security_token", _RK_C_STR,
        _RK(sasl.aws_security_token),
        "SASL AWS security for use with the AWS_MSK_IAM mechanism. Default to $AWS_SECURITY_TOKEN." },
+     { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws.role_arn", _RK_C_STR,
+          _RK(sasl.aws_role_arn),
+          "AWS RoleARN to use for calling STS. Default to $AWS_ROLE_ARN." },
+     { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws.web_identity_token_file.", _RK_C_STR,
+          _RK(sasl.aws_web_identity_token_file),
+          "AWS Web Identity token file to use for calling STS. Default to $AWS_WEB_IDENTITY_TOKEN_FILE." },
+     { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws.role.session.name", _RK_C_STR,
+          _RK(sasl.aws_role_session_name),
+          "Session name to use for STS AssumeRole. Default to librdkafka." },
+     { _RK_GLOBAL, "sasl.aws.duration.sec", _RK_C_INT,
+          _RK(sasl.aws_duration_sec),
+          "The duration, in seconds, of the role session. "
+          "Minimum is 900 seconds (15 minutes) and max is 12 hours. "
+          "This will default to 900 seconds if not set.",
+          900, 43200, 900,
+          _UNSUPPORTED_OAUTHBEARER
+        },
      {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.config", _RK_C_STR,
      _RK(sasl.oauthbearer_config),
      "SASL/OAUTHBEARER configuration. The format is "

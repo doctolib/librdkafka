@@ -32,6 +32,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <curl/curl.h>
 
@@ -650,7 +651,197 @@ done:
         return result;
 }
 
+int rd_kafka_aws_credentials_with_web_identity_token_file(
+        rd_kafka_aws_credential_t *credential,
+        const char * aws_web_identity_token_file,
+        const char * aws_role_arn,
+        const char * aws_role_session_name,
+        const int aws_duration_sec,
+        char *errstr,
+        size_t errstr_size
+        ) {
+        int r = 0;
+        FILE * file;
+        int fd;
+        struct stat stats;
+        char duration[10];
+        str_builder_t *sb;
+        char *url = NULL;
+        char *token = NULL;
+        cJSON *jsonp = NULL;
+        rd_http_error_t *herr;
+        rd_http_req_t hreq;
+        struct curl_slist *chunk = NULL;
 
+        file = fopen(aws_web_identity_token_file, "r");
+        if (file == NULL) {
+                rd_snprintf(errstr, errstr_size, "Unable to open %s", aws_web_identity_token_file);
+                r = -1;
+                goto done;
+        }
+        fd = fileno(file);
+        if (fstat(fd, &stats) != 0) {
+                rd_snprintf(errstr, errstr_size, "Unable to get stats from %s", aws_web_identity_token_file);
+                r = -1;
+                goto done;
+        }
+        token = rd_malloc(stats.st_size + 1);
+        if (fread(token, stats.st_size, 1, file) != 1) {
+                rd_snprintf(errstr, errstr_size, "Unable to read token from %s", aws_web_identity_token_file);
+                printf("B3\n");
+                r = -1;
+                goto done;
+        }
+        token[stats.st_size - 1] = '\0';
+        if (fclose(file) != 0) {
+                rd_snprintf(errstr, errstr_size, "Unable to close file from %s", aws_web_identity_token_file);
+                r = -1;
+                goto done;
+        }
+
+        sb = str_builder_create();
+        str_builder_add_str(sb, "https://sts.amazonaws.com/?Action=AssumeRoleWithWebIdentity&Version=2011-06-15&&DurationSeconds=");
+        sprintf(duration, "%d", aws_duration_sec);
+        str_builder_add_str(sb, duration);
+        str_builder_add_str(sb, "&RoleSessionName=");
+        str_builder_add_str(sb, aws_role_session_name);
+        str_builder_add_str(sb, "&RoleArn=");
+        str_builder_add_str(sb, aws_role_arn);
+        str_builder_add_str(sb, "&WebIdentityToken=");
+        str_builder_add_str(sb, token);
+
+        url = str_builder_dump(sb);
+
+        str_builder_destroy(sb);
+
+        herr = rd_http_req_init(&hreq, url);
+        if (herr != NULL) {
+                rd_snprintf(errstr, errstr_size, "Error while calling AssumeRoleWithWebIdentity %d %s", herr->code, herr->errstr);
+                rd_http_error_destroy(herr);
+                r = -1;
+                goto done;
+        }
+
+        chunk = curl_slist_append(chunk, "Accept: application/json");
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, chunk);
+
+        herr = rd_http_req_perform_sync(&hreq);
+        if (herr != NULL) {
+                rd_snprintf(errstr, errstr_size, "Error while calling AssumeRoleWithWebIdentity %d %s", herr->code, herr->errstr);
+                rd_http_error_destroy(herr);
+                r = -1;
+                goto done;
+        }
+
+        herr = rd_http_parse_json(&hreq, &jsonp);
+        if (herr != NULL) {
+                rd_snprintf(errstr, errstr_size, "Error while calling AssumeRoleWithWebIdentity %d %s", herr->code, herr->errstr);
+                rd_http_error_destroy(herr);
+                r = -1;
+                goto done;
+        }
+
+        char *aws_access_key_id, *aws_secret_access_key, *aws_security_token;
+        cJSON *json_response, *json_result, *json_credentials, *json_aws_access_key_id, *json_aws_secret_access_key, *json_aws_security_token, *json_expiration;
+        double expiration;
+        json_response = cJSON_GetObjectItem(jsonp, "AssumeRoleWithWebIdentityResponse");
+        if (json_response == NULL) {
+                rd_snprintf(errstr, errstr_size, "Unable to parse JSON from assume role");
+                r = -1;
+                goto done;
+        }
+
+        json_result = cJSON_GetObjectItem(json_response, "AssumeRoleWithWebIdentityResult");
+        if (json_result == NULL) {
+                rd_snprintf(errstr, errstr_size, "Unable to parse JSON from assume role");
+                r = -1;
+                goto done;
+        }
+
+        json_credentials = cJSON_GetObjectItem(json_result, "Credentials");
+        if (json_credentials == NULL) {
+                rd_snprintf(errstr, errstr_size, "Unable to parse JSON from assume role");
+                r = -1;
+                goto done;
+        }
+
+        json_aws_access_key_id = cJSON_GetObjectItem(json_credentials, "AccessKeyId");
+        if (json_aws_access_key_id == NULL) {
+                rd_snprintf(errstr, errstr_size, "Unable to parse JSON from assume role");
+                r = -1;
+                goto done;
+        }
+
+        aws_access_key_id = cJSON_GetStringValue(json_aws_access_key_id);
+        if (aws_access_key_id == NULL) {
+                rd_snprintf(errstr, errstr_size, "Unable to parse JSON from assume role");
+                r = -1;
+                goto done;
+        }
+
+        json_aws_secret_access_key = cJSON_GetObjectItem(json_credentials, "SecretAccessKey");
+        if (json_aws_secret_access_key == NULL) {
+                rd_snprintf(errstr, errstr_size, "Unable to parse JSON from assume role");
+                r = -1;
+                goto done;
+        }
+
+        aws_secret_access_key = cJSON_GetStringValue(json_aws_secret_access_key);
+        if (aws_secret_access_key == NULL) {
+                rd_snprintf(errstr, errstr_size, "Unable to parse JSON from assume role");
+                r = -1;
+                goto done;
+        }
+
+        json_aws_security_token = cJSON_GetObjectItem(json_credentials, "SessionToken");
+        if (json_aws_security_token == NULL) {
+                rd_snprintf(errstr, errstr_size, "Unable to parse JSON from assume role");
+                r = -1;
+                goto done;
+        }
+
+        aws_security_token = cJSON_GetStringValue(json_aws_security_token);
+        if (aws_security_token == NULL) {
+                rd_snprintf(errstr, errstr_size, "Unable to parse JSON from assume role");
+                r = -1;
+                goto done;
+        }
+
+        json_expiration = cJSON_GetObjectItem(json_credentials, "Expiration");
+        if (json_expiration == NULL) {
+                rd_snprintf(errstr, errstr_size, "Unable to parse JSON from assume role");
+                r = -1;
+                goto done;
+        }
+
+        expiration = cJSON_GetNumberValue(json_expiration);
+        if (expiration <= 0) {
+                rd_snprintf(errstr, errstr_size, "Unable to parse JSON from assume role");
+                r = -1;
+                goto done;
+        }
+
+        credential->aws_access_key_id = rd_malloc(strlen(aws_access_key_id) + 1);
+        strcpy(credential->aws_access_key_id, aws_access_key_id);
+
+        credential->aws_secret_access_key = rd_malloc(strlen(aws_secret_access_key) + 1);
+        strcpy(credential->aws_secret_access_key, aws_secret_access_key);
+
+        credential->aws_security_token = rd_malloc(strlen(aws_security_token) + 1);
+        strcpy(credential->aws_security_token, aws_security_token);
+
+        credential->md_lifetime_ms = ((int64_t) expiration) * 1000;
+
+        printf("Web identity token file valid until %f %lld\n", expiration, credential->md_lifetime_ms);
+
+        r = 0;
+done:
+        RD_IF_FREE(chunk, curl_slist_free_all);
+        RD_IF_FREE(url, rd_free);
+        RD_IF_FREE(token, rd_free);
+        RD_IF_FREE(jsonp, cJSON_Delete);
+        return r;
+}
 
 /**
  * @name Unit tests

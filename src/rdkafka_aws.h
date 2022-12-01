@@ -73,6 +73,14 @@ int rd_kafka_aws_credentials_from_metadata(
         rd_kafka_aws_credential_t *credential,
         char *errstr,
         size_t errstr_size);
+int rd_kafka_aws_credentials_with_web_identity_token_file(
+        rd_kafka_aws_credential_t *credential,
+        const char * aws_web_identity_token_file,
+        const char * aws_role_arn,
+        const char * aws_role_session_name,
+        const int aws_duration_sec,
+        char *errstr,
+        size_t errstr_size);
 char * rd_kafka_aws_region_from_metadata(
         char *errstr,
         size_t errstr_size);

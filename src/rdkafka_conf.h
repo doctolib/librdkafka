@@ -293,6 +293,10 @@ struct rd_kafka_conf_s {
                 char *aws_region;
                 char *aws_security_token;
                 int aws_refresh_kind;
+                char *aws_role_arn;
+                char *aws_web_identity_token_file;
+                char *aws_role_session_name;
+                int aws_duration_sec;
 #endif
                 char *oauthbearer_config;
                 int enable_oauthbearer_unsecure_jwt;

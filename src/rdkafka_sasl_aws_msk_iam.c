@@ -56,6 +56,7 @@
 
 #define AWS_REFRESH_NO_REFRESH 0
 #define AWS_REFRESH_METADATA 1
+#define AWS_REFRESH_WEB_IDENTITY_TOKEN_FILE 2
 
 /**
  * @struct Per-client-instance SASL/AWS_MSK_IAM handle.
@@ -265,8 +266,27 @@ rd_kafka_aws_msk_iam_set_credential_failure (rd_kafka_t *rk, const char *errstr)
 static int rd_kafka_aws_refresh_with_metadata(
                 rd_kafka_t *rk,
                 char *errstr, size_t errstr_size) {
-        rd_kafka_aws_credential_t credential;
+        rd_kafka_aws_credential_t credential = RD_ZERO_INIT;
         if (rd_kafka_aws_credentials_from_metadata(&credential, errstr, errstr_size) == -1
+                || rd_kafka_aws_msk_iam_set_credential(rk, &credential, rk->rk_conf.sasl.aws_region, errstr, errstr_size) == -1) {
+                rd_kafka_sasl_aws_msk_iam_credential_free(&credential);
+                rd_kafka_aws_msk_iam_set_credential_failure(rk, errstr);
+                return -1;
+        }
+        rd_kafka_sasl_aws_msk_iam_credential_free(&credential);
+        return 0;
+}
+
+/**
+ * @brief SASL/AWS_MSK_IAM credential refresh using AWS Web identity token file.
+ */
+static int rd_kafka_aws_refresh_with_web_identity_token_file(
+                rd_kafka_t *rk,
+                char *errstr, size_t errstr_size) {
+        rd_kafka_aws_credential_t credential = RD_ZERO_INIT;
+
+        if (rd_kafka_aws_credentials_with_web_identity_token_file(&credential, rk->rk_conf.sasl.aws_web_identity_token_file, rk->rk_conf.sasl.aws_role_arn,
+                  rk->rk_conf.sasl.aws_role_session_name, rk->rk_conf.sasl.aws_duration_sec, errstr, errstr_size) == -1
                 || rd_kafka_aws_msk_iam_set_credential(rk, &credential, rk->rk_conf.sasl.aws_region, errstr, errstr_size) == -1) {
                 rd_kafka_sasl_aws_msk_iam_credential_free(&credential);
                 rd_kafka_aws_msk_iam_set_credential_failure(rk, errstr);
@@ -287,7 +307,6 @@ static int rd_kafka_aws_refresh_with_metadata(
 static void
 rd_kafka_aws_msk_iam_credential_refresh (rd_kafka_t *rk, void *opaque) {
         char errstr[512];
-        rd_kafka_aws_credential_t credential = RD_ZERO_INIT;
 
         rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Refreshing AWS credentials");
         if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_METADATA) {
@@ -295,10 +314,14 @@ rd_kafka_aws_msk_iam_credential_refresh (rd_kafka_t *rk, void *opaque) {
                 if (rd_kafka_aws_refresh_with_metadata(rk, errstr, sizeof(errstr)) == -1) {
                         rd_kafka_aws_msk_iam_set_credential_failure(rk, errstr);
                 }
+        } else if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_WEB_IDENTITY_TOKEN_FILE) {
+                rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Refresh AWS creds with web identity token file");
+                if (rd_kafka_aws_refresh_with_web_identity_token_file(rk, errstr, sizeof(errstr)) == -1) {
+                        rd_kafka_aws_msk_iam_set_credential_failure(rk, errstr);
+                }
         } else {
                 rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "No refresh needed");
         }
-        rd_kafka_sasl_aws_msk_iam_credential_free(&credential);
 }
 
 /**
@@ -646,6 +669,10 @@ static int rd_kafka_sasl_aws_msk_iam_init (rd_kafka_t *rk,
                 if (rd_kafka_aws_refresh_with_metadata(rk, errstr, errstr_size) != 0) {
                         return RD_KAFKA_RESP_ERR__STATE;
                 }
+        } else if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_WEB_IDENTITY_TOKEN_FILE) {
+                if (rd_kafka_aws_refresh_with_web_identity_token_file(rk, errstr, errstr_size) != 0) {
+                        return RD_KAFKA_RESP_ERR__STATE;
+                }
         } else {
                 rd_snprintf(errstr, errstr_size, "Wrong aws refresh kind: %d",rk->rk_conf.sasl.aws_refresh_kind);
                 return RD_KAFKA_RESP_ERR__STATE;
@@ -714,6 +741,15 @@ static int rd_kafka_sasl_aws_msk_iam_conf_validate (rd_kafka_t *rk,
         if (!rk->rk_conf.sasl.aws_security_token && getenv("AWS_SECURITY_TOKEN")) {
                 rk->rk_conf.sasl.aws_security_token = rd_strdup(getenv("AWS_SECURITY_TOKEN"));
         }
+        if (!rk->rk_conf.sasl.aws_role_arn && getenv("AWS_ROLE_ARN")) {
+                rk->rk_conf.sasl.aws_role_arn = rd_strdup(getenv("AWS_ROLE_ARN"));
+        }
+        if (!rk->rk_conf.sasl.aws_role_session_name) {
+                rk->rk_conf.sasl.aws_role_session_name = rd_strdup("librdkafka");
+        }
+        if (!rk->rk_conf.sasl.aws_web_identity_token_file && getenv("AWS_WEB_IDENTITY_TOKEN_FILE")) {
+                rk->rk_conf.sasl.aws_web_identity_token_file = rd_strdup(getenv("AWS_WEB_IDENTITY_TOKEN_FILE"));
+        }
         if (!rk->rk_conf.sasl.aws_region) {
                 rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "No AWS Region provided, trying to get it from metadata API");
                 char * region = rd_kafka_aws_region_from_metadata(errstr, errstr_size);
@@ -722,7 +758,20 @@ static int rd_kafka_sasl_aws_msk_iam_conf_validate (rd_kafka_t *rk,
                         RD_IF_FREE(region, rd_free);
                 }
         }
-        if (!rk->rk_conf.sasl.aws_access_key_id || !rk->rk_conf.sasl.aws_secret_access_key || !rk->rk_conf.sasl.aws_region) {
+        if (!rk->rk_conf.sasl.aws_region) {
+                        rd_snprintf(errstr, errstr_size,
+                            "sasl.aws_region must be set or exists in the environment ($AWS_DEFAULT_REGION or metadata api)");
+                return -1;
+        }
+        if ((!rk->rk_conf.sasl.aws_access_key_id || !rk->rk_conf.sasl.aws_secret_access_key) && rk->rk_conf.sasl.aws_role_arn && rk->rk_conf.sasl.aws_web_identity_token_file) {
+                if (access(rk->rk_conf.sasl.aws_web_identity_token_file, F_OK) == 0) {
+                        printf("Foo %s %s\n", rk->rk_conf.sasl.aws_role_arn, rk->rk_conf.sasl.aws_web_identity_token_file);
+                        rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "Enabling AWS Authen useing web identity token file");
+                        rk->rk_conf.sasl.aws_refresh_kind = AWS_REFRESH_WEB_IDENTITY_TOKEN_FILE;
+                        return 0;
+                }
+        }
+        if (!rk->rk_conf.sasl.aws_access_key_id || !rk->rk_conf.sasl.aws_secret_access_key) {
                 rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "No AWS Credentials provided, trying to get credentials from metadata API");
                 rd_kafka_aws_credential_t credential;
                 if (rd_kafka_aws_credentials_from_metadata(&credential, errstr, errstr_size) == 0) {
@@ -732,7 +781,7 @@ static int rd_kafka_sasl_aws_msk_iam_conf_validate (rd_kafka_t *rk,
                         return 0;
                 }
         }
-        if (!rk->rk_conf.sasl.aws_access_key_id || !rk->rk_conf.sasl.aws_secret_access_key || !rk->rk_conf.sasl.aws_region) {
+        if (!rk->rk_conf.sasl.aws_access_key_id || !rk->rk_conf.sasl.aws_secret_access_key) {
                 rd_snprintf(errstr, errstr_size,
                             "sasl.aws_access_key_id, sasl.aws_secret_access_key, and sasl.aws_region must be set");
                 return -1;
