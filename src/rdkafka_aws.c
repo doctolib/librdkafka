@@ -692,7 +692,7 @@ int rd_kafka_aws_credentials_with_web_identity_token_file(
                 r = -1;
                 goto done;
         }
-        token[stats.st_size - 1] = '\0';
+        token[stats.st_size] = '\0';
         if (fclose(file) != 0) {
                 rd_snprintf(errstr, errstr_size, "Unable to close file from %s", aws_web_identity_token_file);
                 r = -1;

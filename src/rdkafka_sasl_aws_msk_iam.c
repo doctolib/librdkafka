@@ -729,6 +729,9 @@ static int rd_kafka_sasl_aws_msk_iam_conf_validate (rd_kafka_t *rk,
                                               char *errstr,
                                               size_t errstr_size) {
         rk->rk_conf.sasl.aws_refresh_kind = AWS_REFRESH_NO_REFRESH;
+        if (!rk->rk_conf.sasl.aws_region && getenv("AWS_REGION")) {
+                rk->rk_conf.sasl.aws_region = rd_strdup(getenv("AWS_REGION"));
+        }
         if (!rk->rk_conf.sasl.aws_region && getenv("AWS_DEFAULT_REGION")) {
                 rk->rk_conf.sasl.aws_region = rd_strdup(getenv("AWS_DEFAULT_REGION"));
         }
