@@ -832,7 +832,7 @@ int rd_kafka_aws_credentials_with_web_identity_token_file(
 
         credential->md_lifetime_ms = ((int64_t) expiration) * 1000;
 
-        printf("Web identity token file valid until %f %lld\n", expiration, credential->md_lifetime_ms);
+        printf("Web identity token file valid until %f %lld, access key id %s\n", expiration, credential->md_lifetime_ms, credential->aws_access_key_id);
 
         r = 0;
 done:

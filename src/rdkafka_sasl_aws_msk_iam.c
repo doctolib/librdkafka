@@ -179,6 +179,12 @@ rd_kafka_aws_msk_iam_set_credential (rd_kafka_t *rk,
 
         rwlock_wrlock(&handle->lock);
 
+        if (handle->aws_access_key_id) {
+                printf("Replacing creds: %s to %s\n", handle->aws_access_key_id, credential->aws_access_key_id);
+        }
+        else {
+                printf("Setting creds: %s\n", credential->aws_access_key_id);
+        }
         RD_IF_FREE(handle->aws_access_key_id, rd_free);
         handle->aws_access_key_id = rd_strdup(credential->aws_access_key_id);
 
@@ -310,12 +316,14 @@ rd_kafka_aws_msk_iam_credential_refresh (rd_kafka_t *rk, void *opaque) {
 
         rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Refreshing AWS credentials");
         if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_METADATA) {
+                printf("Refreshing from web metadata\n");
                 rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Refresh AWS creds from metadata API");
                 if (rd_kafka_aws_refresh_with_metadata(rk, errstr, sizeof(errstr)) == -1) {
                         rd_kafka_aws_msk_iam_set_credential_failure(rk, errstr);
                 }
         } else if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_WEB_IDENTITY_TOKEN_FILE) {
                 rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Refresh AWS creds with web identity token file");
+                printf("Refreshing from web identity file\n");
                 if (rd_kafka_aws_refresh_with_web_identity_token_file(rk, errstr, sizeof(errstr)) == -1) {
                         rd_kafka_aws_msk_iam_set_credential_failure(rk, errstr);
                 }
@@ -666,10 +674,12 @@ static int rd_kafka_sasl_aws_msk_iam_init (rd_kafka_t *rk,
                 rwlock_wrunlock(&handle->lock);
         }
         else if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_METADATA) {
+                printf("Init creds from metadata\n");
                 if (rd_kafka_aws_refresh_with_metadata(rk, errstr, errstr_size) != 0) {
                         return RD_KAFKA_RESP_ERR__STATE;
                 }
         } else if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_WEB_IDENTITY_TOKEN_FILE) {
+                printf("Init creds from web identity token file\n");
                 if (rd_kafka_aws_refresh_with_web_identity_token_file(rk, errstr, errstr_size) != 0) {
                         return RD_KAFKA_RESP_ERR__STATE;
                 }
@@ -768,7 +778,7 @@ static int rd_kafka_sasl_aws_msk_iam_conf_validate (rd_kafka_t *rk,
         }
         if ((!rk->rk_conf.sasl.aws_access_key_id || !rk->rk_conf.sasl.aws_secret_access_key) && rk->rk_conf.sasl.aws_role_arn && rk->rk_conf.sasl.aws_web_identity_token_file) {
                 if (access(rk->rk_conf.sasl.aws_web_identity_token_file, F_OK) == 0) {
-                        printf("Foo %s %s\n", rk->rk_conf.sasl.aws_role_arn, rk->rk_conf.sasl.aws_web_identity_token_file);
+                        printf("Initializing AWS auth with role %s, web identity token file %s\n", rk->rk_conf.sasl.aws_role_arn, rk->rk_conf.sasl.aws_web_identity_token_file);
                         rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "Enabling AWS Authen useing web identity token file");
                         rk->rk_conf.sasl.aws_refresh_kind = AWS_REFRESH_WEB_IDENTITY_TOKEN_FILE;
                         return 0;
