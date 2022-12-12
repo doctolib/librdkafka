@@ -5137,17 +5137,12 @@ typedef int rd_kafka_event_type_t;
 /** DeleteConsumerGroupOffsets_result_t */
 #define RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT 107
 /** SASL/OAUTHBEARER token needs to be refreshed */
-#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x100
+#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x100 /**< SASL/OAUTHBEARER token needs to be refreshed */
 #define RD_KAFKA_EVENT_BACKGROUND                0x200 /**< Enable background thread. */
 #define RD_KAFKA_EVENT_CREATEACLS_RESULT         0x400 /**< CreateAcls_result_t */
 #define RD_KAFKA_EVENT_DESCRIBEACLS_RESULT       0x800 /**< DescribeAcls_result_t */
 #define RD_KAFKA_EVENT_DELETEACLS_RESULT         0x1000 /**< DeleteAcls_result_t */
-#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x100 /**< SASL/OAUTHBEARER
-                                                             token needs to be
-                                                             refreshed */
-#define RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH 0x200 /**< SASL/AWS_MSK_IAM
-                                                             credentials need to be
-                                                             refreshed */
+#define RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH 0x2000 /**< SASL/AWS_MSK_IAM credentials need to be refreshed */
 
 
 /**

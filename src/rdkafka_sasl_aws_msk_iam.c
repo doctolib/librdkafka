@@ -778,7 +778,7 @@ static int rd_kafka_sasl_aws_msk_iam_conf_validate (rd_kafka_t *rk,
         }
         if ((!rk->rk_conf.sasl.aws_access_key_id || !rk->rk_conf.sasl.aws_secret_access_key) && rk->rk_conf.sasl.aws_role_arn && rk->rk_conf.sasl.aws_web_identity_token_file) {
                 if (access(rk->rk_conf.sasl.aws_web_identity_token_file, F_OK) == 0) {
-                        printf("Initializing AWS auth with role %s, web identity token file %s\n", rk->rk_conf.sasl.aws_role_arn, rk->rk_conf.sasl.aws_web_identity_token_file);
+                        printf("Initializing AWS auth %s with role %s, web identity token file %s\n", rk->rk_conf.client_id_str, rk->rk_conf.sasl.aws_role_arn, rk->rk_conf.sasl.aws_web_identity_token_file);
                         rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "Enabling AWS Authen useing web identity token file");
                         rk->rk_conf.sasl.aws_refresh_kind = AWS_REFRESH_WEB_IDENTITY_TOKEN_FILE;
                         return 0;
