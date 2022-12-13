@@ -415,6 +415,8 @@ rd_kafka_sasl_aws_msk_iam_build_client_first_message (
         strftime(ymd, sizeof(char) * 9, "%Y%m%d", tmp);
         strftime(hms, sizeof(char) * 7, "%H%M%S", tmp);
 
+        rd_kafka_dbg(rktrans->rktrans_rkb->rkb_rk, SECURITY, "SASLAWSMSKIAM", "Sending first message for auth using creds: %s", state->aws_access_key_id);
+
         char *canonical_querystring = rd_kafka_aws_build_sasl_canonical_querystring(
                 action,
                 state->aws_access_key_id,
@@ -706,7 +708,9 @@ static void rd_kafka_sasl_aws_msk_iam_term (rd_kafka_t *rk) {
         if (!handle) {
                 return;
         }
-        printf("Termination of session %s\n", handle->aws_access_key_id);
+        if (handle->aws_access_key_id) {
+                rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Termination of SASL session: %s", handle->aws_access_key_id);
+        }
 
         rk->rk_sasl.handle = NULL;
 
@@ -783,8 +787,7 @@ static int rd_kafka_sasl_aws_msk_iam_conf_validate (rd_kafka_t *rk,
         }
         if ((!rk->rk_conf.sasl.aws_access_key_id || !rk->rk_conf.sasl.aws_secret_access_key) && rk->rk_conf.sasl.aws_role_arn && rk->rk_conf.sasl.aws_web_identity_token_file) {
                 if (access(rk->rk_conf.sasl.aws_web_identity_token_file, F_OK) == 0) {
-                        printf("Initializing AWS auth %s with role %s, web identity token file %s\n", rk->rk_conf.client_id_str, rk->rk_conf.sasl.aws_role_arn, rk->rk_conf.sasl.aws_web_identity_token_file);
-                        rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "Enabling AWS Authen useing web identity token file");
+                        rd_kafka_dbg(rk, SECURITY, "BRKMAIN", "Enabling AWS Authen using web identity token file from file %s", rk->rk_conf.sasl.aws_web_identity_token_file);
                         rk->rk_conf.sasl.aws_refresh_kind = AWS_REFRESH_WEB_IDENTITY_TOKEN_FILE;
                         return 0;
                 }

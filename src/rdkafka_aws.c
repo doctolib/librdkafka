@@ -172,7 +172,6 @@ char *rd_kafka_aws_build_sasl_canonical_querystring (const char *action,
                                                 const char *aws_service,
                                                 const char *aws_security_token) {
 
-        printf("rd_kafka_aws_build_sasl_canonical_querystring: %s\n", aws_access_key_id);
         char *uri_action = rd_kafka_aws_uri_encode(action);
 
         char *credential_scope = rd_kafka_aws_construct_credential_scope(
@@ -690,7 +689,6 @@ int rd_kafka_aws_credentials_with_web_identity_token_file(
         token = rd_malloc(stats.st_size + 1);
         if (fread(token, stats.st_size, 1, file) != 1) {
                 rd_snprintf(errstr, errstr_size, "Unable to read token from %s", aws_web_identity_token_file);
-                printf("B3\n");
                 r = -1;
                 goto done;
         }
