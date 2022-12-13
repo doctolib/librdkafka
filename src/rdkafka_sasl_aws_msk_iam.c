@@ -180,10 +180,10 @@ rd_kafka_aws_msk_iam_set_credential (rd_kafka_t *rk,
         rwlock_wrlock(&handle->lock);
 
         if (handle->aws_access_key_id) {
-                printf("Replacing creds: %s to %s\n", handle->aws_access_key_id, credential->aws_access_key_id);
+                printf("Replacing creds: old: %s new: %s\n", handle->aws_access_key_id, credential->aws_access_key_id);
         }
         else {
-                printf("Setting creds: %s\n", credential->aws_access_key_id);
+                printf("Setting new creds: %s\n", credential->aws_access_key_id);
         }
         RD_IF_FREE(handle->aws_access_key_id, rd_free);
         handle->aws_access_key_id = rd_strdup(credential->aws_access_key_id);
@@ -213,7 +213,7 @@ rd_kafka_aws_msk_iam_set_credential (rd_kafka_t *rk,
         rd_kafka_dbg(rk, SECURITY, "BRKMAIN",
                      "Waking up waiting broker threads after "
                      "setting AWS_MSK_IAM credential");
-        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT, "start iam auth");
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT, "AWS IAM Creds reloaded");
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -598,20 +598,19 @@ static int rd_kafka_sasl_aws_msk_iam_client_new (rd_kafka_transport_t *rktrans,
                 rwlock_rdunlock(&handle->lock);
                 return -1;
         }
-
         state->hostname = (char *)hostname;
         state->md = EVP_get_digestbyname("SHA256");
 
         state->aws_access_key_id = rd_strdup(handle->aws_access_key_id);
         state->aws_secret_access_key = rd_strdup(handle->aws_secret_access_key);
         state->aws_region = rd_strdup(handle->aws_region);
-
-        if (handle->aws_secret_access_key != NULL) {
-            state->aws_security_token = rd_strdup(handle->aws_security_token);
+        if (handle->aws_security_token) {
+                state->aws_security_token = rd_strdup(handle->aws_security_token);
         }
-
+        else {
+                state->aws_security_token = NULL;
+        }
         rwlock_rdunlock(&handle->lock);
-
         /* Kick off the FSM */
         return rd_kafka_sasl_aws_msk_iam_fsm(rktrans, NULL, errstr, errstr_size);
 }
@@ -630,6 +629,7 @@ rd_kafka_sasl_aws_msk_iam_credential_refresh_tmr_cb (rd_kafka_timers_t *rkts,
         /* Enqueue a token refresh if necessary */
         rd_kafka_aws_msk_iam_enqueue_credential_refresh_if_necessary(handle);
 }
+
 
 /**
  * @brief Per-client-instance initializer
@@ -667,11 +667,15 @@ static int rd_kafka_sasl_aws_msk_iam_init (rd_kafka_t *rk,
                 handle->aws_access_key_id = rd_strdup(conf->sasl.aws_access_key_id);
                 handle->aws_secret_access_key = rd_strdup(conf->sasl.aws_secret_access_key);
                 handle->aws_region = rd_strdup(conf->sasl.aws_region);
-
-                if (conf->sasl.aws_security_token != NULL) {
+                if (conf->sasl.aws_security_token) {
                         handle->aws_security_token = rd_strdup(conf->sasl.aws_security_token);
                 }
+                else {
+                        handle->aws_security_token = NULL;
+                }
+
                 rwlock_wrunlock(&handle->lock);
+                rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT, "AWS IAM Creds reloaded");
         }
         else if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_METADATA) {
                 printf("Init creds from metadata\n");
@@ -702,6 +706,7 @@ static void rd_kafka_sasl_aws_msk_iam_term (rd_kafka_t *rk) {
         if (!handle) {
                 return;
         }
+        printf("Termination of session %s\n", handle->aws_access_key_id);
 
         rk->rk_sasl.handle = NULL;
 

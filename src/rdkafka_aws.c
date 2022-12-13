@@ -171,6 +171,8 @@ char *rd_kafka_aws_build_sasl_canonical_querystring (const char *action,
                                                 const char *hms,
                                                 const char *aws_service,
                                                 const char *aws_security_token) {
+
+        printf("rd_kafka_aws_build_sasl_canonical_querystring: %s\n", aws_access_key_id);
         char *uri_action = rd_kafka_aws_uri_encode(action);
 
         char *credential_scope = rd_kafka_aws_construct_credential_scope(
