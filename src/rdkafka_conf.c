@@ -201,6 +201,7 @@ struct rd_kafka_property {
 #endif
 
 #define _UNSUPPORTED_OAUTHBEARER _UNSUPPORTED_SSL
+#define _UNSUPPORTED_AWS_MSK_IAM _UNSUPPORTED_SSL
 
 
 static rd_kafka_conf_res_t
@@ -355,6 +356,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
              {0x800, "sasl_oauthbearer", _UNSUPPORTED_SSL},
              {0x1000, "http", _UNSUPPORTED_HTTP},
              {0x2000, "oidc", _UNSUPPORTED_OIDC},
+             {0x4000, "sasl_aws_msk_iam", _UNSUPPORTED_SSL },
              {0, NULL}}},
     {_RK_GLOBAL, "client.id", _RK_C_STR, _RK(client_id_str),
      "Client identifier.", .sdef = "rdkafka"},
@@ -869,7 +871,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 
     {_RK_GLOBAL | _RK_HIGH, "sasl.mechanisms", _RK_C_STR, _RK(sasl.mechanisms),
      "SASL mechanism to use for authentication. "
-     "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER. "
+     "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, AWS_MSK_IAM. "
      "**NOTE**: Despite the name only one mechanism must be configured.",
      .sdef = "GSSAPI", .validate = rd_kafka_conf_validate_single},
     {_RK_GLOBAL | _RK_HIGH, "sasl.mechanism", _RK_C_ALIAS,
@@ -912,7 +914,36 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_HIGH | _RK_SENSITIVE, "sasl.password", _RK_C_STR,
      _RK(sasl.password),
      "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism"},
-    {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.config", _RK_C_STR,
+    { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws_access_key_id", _RK_C_STR,
+     _RK(sasl.aws_access_key_id),
+     "SASL AWS access key id for use with the AWS_MSK_IAM mechanism. Default to $AWS_ACCESS_KEY_ID." },
+     { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws_secret_access_key", _RK_C_STR,
+      _RK(sasl.aws_secret_access_key),
+     "SASL AWS secret access key for use with the AWS_MSK_IAM mechanism. . Default to $AWS_SECRET_ACCESS_KEY." },
+     { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws_region", _RK_C_STR,
+      _RK(sasl.aws_region),
+      "SASL AWS region for use with the AWS_MSK_IAM mechanism. Default to $AWS_DEFAULT_REGION." },
+     { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws_security_token", _RK_C_STR,
+       _RK(sasl.aws_security_token),
+       "SASL AWS security for use with the AWS_MSK_IAM mechanism. Default to $AWS_SECURITY_TOKEN." },
+     { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws.role_arn", _RK_C_STR,
+          _RK(sasl.aws_role_arn),
+          "AWS RoleARN to use for calling STS. Default to $AWS_ROLE_ARN." },
+     { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws.web_identity_token_file.", _RK_C_STR,
+          _RK(sasl.aws_web_identity_token_file),
+          "AWS Web Identity token file to use for calling STS. Default to $AWS_WEB_IDENTITY_TOKEN_FILE." },
+     { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws.role.session.name", _RK_C_STR,
+          _RK(sasl.aws_role_session_name),
+          "Session name to use for STS AssumeRole. Default to librdkafka." },
+     { _RK_GLOBAL, "sasl.aws.duration.sec", _RK_C_INT,
+          _RK(sasl.aws_duration_sec),
+          "The duration, in seconds, of the role session. "
+          "Minimum is 900 seconds (15 minutes) and max is 12 hours. "
+          "This will default to 900 seconds if not set.",
+          900, 43200, 900,
+          _UNSUPPORTED_OAUTHBEARER
+        },
+     {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.config", _RK_C_STR,
      _RK(sasl.oauthbearer_config),
      "SASL/OAUTHBEARER configuration. The format is "
      "implementation-dependent and must be parsed accordingly. The "

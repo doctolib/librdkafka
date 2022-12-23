@@ -157,7 +157,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 30)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 36)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -284,6 +284,19 @@ struct rd_kafka_conf_s {
                                           unsigned char *md);
                 /* Hash size */
                 size_t scram_H_size;
+#endif
+#if WITH_SASL_AWS_MSK_IAM
+                /* AWS credentials for SASL auth
+                 * (standard toolchain not available in librdkafka) */
+                char *aws_access_key_id;
+                char *aws_secret_access_key;
+                char *aws_region;
+                char *aws_security_token;
+                int aws_refresh_kind;
+                char *aws_role_arn;
+                char *aws_web_identity_token_file;
+                char *aws_role_session_name;
+                int aws_duration_sec;
 #endif
                 char *oauthbearer_config;
                 int enable_oauthbearer_unsecure_jwt;

@@ -76,6 +76,8 @@ const char *rd_kafka_event_name(const rd_kafka_event_t *rkev) {
                 return "DeleteAclsResult";
         case RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH:
                 return "SaslOAuthBearerTokenRefresh";
+        case RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH:
+		return "SaslAwsMskIamCredentialRefresh";
         default:
                 return "?unknown?";
         }
