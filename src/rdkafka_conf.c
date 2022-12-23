@@ -303,7 +303,7 @@ rd_kafka_conf_validate_broker_version(const struct rd_kafka_property *prop,
 }
 
 /**
- * @brief Validate that string is a single item, without delimiters (, space).
+ * @brief Validate that string is a single item, without delimters (, space).
  */
 static RD_UNUSED int
 rd_kafka_conf_validate_single(const struct rd_kafka_property *prop,
