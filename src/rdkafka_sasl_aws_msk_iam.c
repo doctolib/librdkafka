@@ -311,14 +311,12 @@ rd_kafka_aws_msk_iam_credential_refresh (rd_kafka_t *rk, void *opaque) {
 
         rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Refreshing AWS credentials");
         if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_METADATA) {
-                printf("Refreshing from web metadata\n");
                 rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Refresh AWS creds from metadata API");
                 if (rd_kafka_aws_refresh_with_metadata(rk, errstr, sizeof(errstr)) == -1) {
                         rd_kafka_aws_msk_iam_set_credential_failure(rk, errstr);
                 }
         } else if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_WEB_IDENTITY_TOKEN_FILE) {
                 rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Refresh AWS creds with web identity token file");
-                printf("Refreshing from web identity file\n");
                 if (rd_kafka_aws_refresh_with_web_identity_token_file(rk, errstr, sizeof(errstr)) == -1) {
                         rd_kafka_aws_msk_iam_set_credential_failure(rk, errstr);
                 }
