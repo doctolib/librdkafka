@@ -621,7 +621,6 @@ int rd_kafka_aws_credentials_from_metadata(rd_kafka_aws_credential_t *credential
                                 expiration_time.tm_isdst =-1;
 
                                 credential->md_lifetime_ms = ((int64_t) (mktime(&expiration_time) - timezone)) * 1000;
-                                printf("Metadata token valid until %s %lld\n", expiration, credential->md_lifetime_ms);
 
                                 credential->aws_access_key_id = rd_malloc(strlen(aws_access_key_id) + 1);
                                 strcpy(credential->aws_access_key_id, aws_access_key_id);
@@ -831,8 +830,6 @@ int rd_kafka_aws_credentials_with_web_identity_token_file(
         strcpy(credential->aws_security_token, aws_security_token);
 
         credential->md_lifetime_ms = ((int64_t) expiration) * 1000;
-
-        printf("Web identity token file valid until %f %lld, access key id %s\n", expiration, credential->md_lifetime_ms, credential->aws_access_key_id);
 
         r = 0;
 done:

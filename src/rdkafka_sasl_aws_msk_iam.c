@@ -179,12 +179,6 @@ rd_kafka_aws_msk_iam_set_credential (rd_kafka_t *rk,
 
         rwlock_wrlock(&handle->lock);
 
-        if (handle->aws_access_key_id) {
-                printf("Replacing creds: old: %s new: %s\n", handle->aws_access_key_id, credential->aws_access_key_id);
-        }
-        else {
-                printf("Setting new creds: %s\n", credential->aws_access_key_id);
-        }
         RD_IF_FREE(handle->aws_access_key_id, rd_free);
         handle->aws_access_key_id = rd_strdup(credential->aws_access_key_id);
 
@@ -203,7 +197,8 @@ rd_kafka_aws_msk_iam_set_credential (rd_kafka_t *rk,
         handle->wts_refresh_after =
                 (rd_ts_t)(now_wallclock + 0.8 *
                         (wts_md_lifetime - now_wallclock));
-        printf("Next refresh %lld\n", handle->wts_refresh_after);
+        rd_kafka_dbg(rk, SECURITY, "BRKMAIN",
+                     "Next AWS credential refresh planned %lld\n", handle->wts_refresh_after);
 
         RD_IF_FREE(handle->errstr, rd_free);
         handle->errstr = NULL;
@@ -680,12 +675,10 @@ static int rd_kafka_sasl_aws_msk_iam_init (rd_kafka_t *rk,
                 rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT, "AWS IAM Creds reloaded");
         }
         else if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_METADATA) {
-                printf("Init creds from metadata\n");
                 if (rd_kafka_aws_refresh_with_metadata(rk, errstr, errstr_size) != 0) {
                         return RD_KAFKA_RESP_ERR__STATE;
                 }
         } else if (rk->rk_conf.sasl.aws_refresh_kind == AWS_REFRESH_WEB_IDENTITY_TOKEN_FILE) {
-                printf("Init creds from web identity token file\n");
                 if (rd_kafka_aws_refresh_with_web_identity_token_file(rk, errstr, errstr_size) != 0) {
                         return RD_KAFKA_RESP_ERR__STATE;
                 }
